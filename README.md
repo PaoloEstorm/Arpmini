@@ -50,9 +50,21 @@ Arpmini+ Modes
 The modes of Arpmini+ are four:
 
     Arpeggiator (Arp Mode): Arpeggiates the played notes based on the selected arpeggio mode.
+    
+    ![Tavola disegno 1 copia 3](https://github.com/user-attachments/assets/5ece5fd2-1125-45e9-ab23-ff93235e9ae7)
+
     Note Recorder (Rec Mode): Records and plays back up to 4 patterns of variable length, with a maximum of 32 notes each.
+    
+    ![Tavola disegno 1 copia 4](https://github.com/user-attachments/assets/18818a65-44eb-47b1-908b-15d10e24fd06)
+
     Song Mode: Allows the user to chain up to 8 combinations of 4 recorded patterns, in any desired order.
+    
+    ![Tavola disegno 1 copia](https://github.com/user-attachments/assets/75e852b1-e1de-4d3e-8608-1a4b56c05e81)
+
     Live Mode (Live Mode): Allows the playback of 4 different patterns, each assigned to one of the 4 buttons on Arpmini+. When a button is pressed, the associated pattern is played, and it will change when another button is pressed; otherwise, the pattern loops.
+    
+   ![Tavola disegno 1 copia 5](https://github.com/user-attachments/assets/5d6f9d34-c9c5-43f8-b185-036831754d0e)
+ 
 
 Additional Functions
 
