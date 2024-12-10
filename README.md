@@ -17,6 +17,7 @@ Its features include:
         MIDI CC mapping for the buttons.
 
 At the core of Arpmini+ is an Arduino Pro Micro with an ATmega32u4 microcontroller, which provides USB MIDI compatibility and flexibility for future expansions.
+
 Arpeggio Modes (Arp Modes)
 
 The arpeggio modes of Arpmini+ are seven:
@@ -47,7 +48,7 @@ Arpmini+ includes 12 selectable musical scales: 0. Linear: No variation between 
 
 Arpmini+ Modes
 
-The modes of Arpmini+ are four:
+Arpmini+ has four modes:
 
 ![Tavola disegno 13](https://github.com/user-attachments/assets/443ddb94-6dd9-4fc4-ae67-83bd67afdbf7)
 
