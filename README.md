@@ -58,7 +58,7 @@ Additional Functions
 
 Various other functions and settings are available through the menu. Additionally, future updates may add more features to Arpmini+ to further enhance its capabilities and meet user needs.
 
-A simulated demo of Arpmini+ can be explored on Wokwi via the link https://wokwi.com/projects/415695537200967681.
+A simulated demo of Arpmini+ can be explored on Wokwi via the link https://wokwi.com/projects/415695537200967681
 
 Schematic and PCB design: https://oshwlab.com/estorm/miniseq
 
