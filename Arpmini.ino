@@ -501,9 +501,8 @@ ISR(TIMER1_COMPA_vect) {  // internal clock
   static const uint8_t MaxClockTimeout = 100;
 
   if (internalClock) {
-        if ((sendrealtime == 1 && playing) || (sendrealtime == 2)) MIDI.sendRealTime(midi::Clock);
+    if ((sendrealtime == 1 && playing) || (sendrealtime == 2)) MIDI.sendRealTime(midi::Clock);
     RunClock();
-
   } else {
     clockTimeout++;
     if (clockTimeout > MaxClockTimeout) {
