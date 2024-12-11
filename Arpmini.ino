@@ -2,7 +2,7 @@
  *  @file       Arpmini.ino
  *  Project     Estorm - Arpmini+
  *  @brief      MIDI Sequencer & Arpeggiator
- *  @version    1.95
+ *  @version    1.96
  *  @author     Paolo Estorm
  *  @date       09/12/24
  *  @license    GPL v3.0 
@@ -22,7 +22,7 @@
  */
 
 // system
-char version[] = "1.95";
+char version[] = "1.96";
 
 // leds
 #define redled 3     // red led pin
@@ -100,9 +100,9 @@ uint8_t StepSpeed = 2;          // 1=2x, 2=1x, 3=3/4, 4=1/2
 bool FixSync = false;           // tries to re-allign the sequence when changing step-speeds
 bool internalClock = true;      // is the sequencer using the internal clock (otherwise external sync)?
 bool flipflopEnable;            // part of the frameperstep flipflop
-bool sendrealtime = true;       // toggle send midi realtime messages
+uint8_t sendrealtime = 1;       // send midi realtime messages. 0=off, 1=on (@internalclock, only if playing), 2=on (@internalclock, always)
 int8_t GlobalStep;              // keep track of note steps only for metronome and tempo indicator in arp mode
-int8_t tSignature = 4;          // time signature for led indicator/metronome and beats, 1 - 8 (1*/4, 2*/4..ecc)
+int8_t tSignature = 4;          // time signature for led indicator/metronome and beats, 1 - 8 (1*/4, 2*/4..to 8/4)
 int8_t GlobalDivison = 4;       // how many steps per beat
 int8_t countBeat;               // keep track of the time beats
 int8_t countStep;               // keep track of note steps in seq/song mode
@@ -501,8 +501,9 @@ ISR(TIMER1_COMPA_vect) {  // internal clock
   static const uint8_t MaxClockTimeout = 100;
 
   if (internalClock) {
+        if ((sendrealtime == 1 && playing) || (sendrealtime == 2)) MIDI.sendRealTime(midi::Clock);
     RunClock();
-    if (sendrealtime && playing) MIDI.sendRealTime(midi::Clock);
+
   } else {
     clockTimeout++;
     if (clockTimeout > MaxClockTimeout) {
@@ -513,11 +514,10 @@ ISR(TIMER1_COMPA_vect) {  // internal clock
 
 void HandleClock() {  // external clock
 
-  if (sendrealtime && !internalClock) MIDI.sendRealTime(midi::Clock);
-
   if (!internalClock) {
     clockTimeout = 0;
     RunClock();
+    if (sendrealtime) MIDI.sendRealTime(midi::Clock);
   }
 }
 
@@ -525,7 +525,7 @@ void RunClock() {  // main clock
 
   countTicks = (countTicks + 1) % ticksPerStep;
 
-  if (countTicks == 1) {
+  if (countTicks == 0) {
     if (start) {
       start = false;
       if (sendrealtime) MIDI.sendSongPosition(0);  // make ableton live happy, without would be slightly out of sync
@@ -771,7 +771,7 @@ void Metronome() {  // manage the metronome
 void HandleStart() {  // start message - re-start the sequence
 
   if (sendrealtime) {
-    MIDI.sendRealTime(midi::Clock);
+    //  MIDI.sendRealTime(midi::Clock);
     MIDI.sendRealTime(midi::Start);
   }
 
@@ -819,9 +819,8 @@ void StartAndStop() {  // manage starts and stops
     Startposition();
     if (sendrealtime) {
       if (playing) {
-        MIDI.sendRealTime(midi::Clock);
         MIDI.sendRealTime(midi::Start);
-        start = true;  // to make ableton live happy
+        start = true;  // to make ableton live 10 happy
       } else MIDI.sendRealTime(midi::Stop);
     }
   }
@@ -833,8 +832,6 @@ void HandleSongPosition(unsigned int position) {  // send song position midi mes
 }
 
 void Startposition() {  // called every time the sequencing start or stop
-
-  TCNT1 = 0;  // restart timer1
 
   SetTicksPerStep();
 
@@ -1788,7 +1785,8 @@ void PrintSubmenu(uint8_t item) {  // print menu 2 to the screen
     case 13:  // midi realtime messages
       oled.println(sync);
       if (!sendrealtime) oled.print(off);
-      else if (sendrealtime) oled.print(on);
+      else if (sendrealtime == 1) oled.print(on);
+      else if (sendrealtime == 2) oled.print(F("ALWAYS"));
       break;
 
     case 14:  // sync port
@@ -2032,10 +2030,13 @@ void SubmenuSettings(uint8_t item, bool dir) {  // handles changing settings in 
       }
       break;
 
-    case 13:  // midi realtime messages
+    case 13:  // send midi realtime messages
       if (!greenstate) {
-        if (dir == HIGH) sendrealtime = true;
-        else sendrealtime = false;
+        if (dir == LOW) {
+          if (sendrealtime < 2) sendrealtime++;
+        } else {
+          if (sendrealtime > 0) sendrealtime--;
+        }
       } else {
         EEPROM.update(1, sendrealtime);
         ScreenBlink();
