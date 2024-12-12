@@ -17,8 +17,6 @@ At the core of Arpmini+ is an Arduino Pro Micro with an ATmega32u4 microcontroll
 
 Arpeggio Styles
 
-The arpeggio styles of Arpmini+ are seven:
-
     Up: Notes played in ascending order.
     Down: Notes played in descending order.
     Up-Down: Notes played in ascending order, then descending.
@@ -28,8 +26,6 @@ The arpeggio styles of Arpmini+ are seven:
     Random: Notes played in a random order.
 
 Musical Scales
-
-Arpmini+ includes 12 selectable musical scales:
 
     Linear: No variation between input note and output note
     PentMaj: Major pentatonic scale.
@@ -45,8 +41,6 @@ Arpmini+ includes 12 selectable musical scales:
     Hexaton: Hexatonic scale.
 
 Arpmini+ Modes
-
-Arpmini+ has four modes:
 
 ![Tavola disegno 13](https://github.com/user-attachments/assets/443ddb94-6dd9-4fc4-ae67-83bd67afdbf7)
 
