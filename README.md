@@ -18,9 +18,9 @@ Its features include:
 
 At the core of Arpmini+ is an Arduino Pro Micro with an ATmega32u4 microcontroller, which provides USB MIDI compatibility and flexibility for future expansions.
 
-Arpeggio Modes (Arp Modes)
+Arpeggio Styles
 
-The arpeggio modes of Arpmini+ are seven:
+The arpeggio styles of Arpmini+ are seven:
 
     Up: Notes played in ascending order.
     Down: Notes played in descending order.
@@ -30,7 +30,7 @@ The arpeggio modes of Arpmini+ are seven:
     Down+Up: Alternating descending-ascending sequence.
     Random: Notes played in a random order.
 
-Musical Scales (Scales)
+Musical Scales
 
 Arpmini+ includes 12 selectable musical scales: 0. Linear: No variation between input note and output note (effectively does nothing).
 
