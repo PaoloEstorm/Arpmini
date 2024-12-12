@@ -29,10 +29,11 @@ The arpeggio styles of Arpmini+ are seven:
 
 Musical Scales
 
-Arpmini+ includes 12 selectable musical scales: 0. Linear: No variation between input note and output note (effectively does nothing).
+Arpmini+ includes 12 selectable musical scales:
 
-    Penta. Major: Major pentatonic scale.
-    Penta. Minor: Minor pentatonic scale.
+    Linear: No variation between input note and output note
+    PentMaj: Major pentatonic scale.
+    PentMin: Minor pentatonic scale.
     Major: Major scale.
     Minor: Minor scale.
     Arabic: Arabic scale.
@@ -40,8 +41,8 @@ Arpmini+ includes 12 selectable musical scales: 0. Linear: No variation between 
     Locrian: Locrian scale.
     Lydian: Lydian scale.
     Dorian: Dorian scale.
-    Inverted: Inverted scale.
-    Hexatonal: Hexatonic scale.
+    Inverse: Inverted scale.
+    Hexaton: Hexatonic scale.
 
 Arpmini+ Modes
 
@@ -49,10 +50,10 @@ Arpmini+ has four modes:
 
 ![Tavola disegno 13](https://github.com/user-attachments/assets/443ddb94-6dd9-4fc4-ae67-83bd67afdbf7)
 
-    Arpeggiator (Arp Mode): Arpeggiates the played notes based on the selected arpeggio mode.
-    Note Recorder (Rec Mode): Records and plays back up to 4 patterns of variable length, with a maximum of 32 notes each.
+    Arp Mode: Arpeggiates the played notes based on the selected arpeggio mode.
+    Rec Mode: Records and plays back up to 4 patterns of variable length, with a maximum of 32 notes each.
     Song Mode: Allows the user to chain up to 8 combinations of 4 recorded patterns, in any desired order.
-    Live Mode (Live Mode): Allows the playback of 4 different patterns, each assigned to one of the 4 buttons on Arpmini+. When a button is pressed, the associated pattern is played, and it will change when another button is pressed; otherwise, the pattern loops.
+    Live Mode: Allows the playback of 4 different patterns, each assigned to one of the 4 buttons on Arpmini+. When a button is pressed, the associated pattern is played, and it will change when another button is pressed; otherwise, the pattern loops.
         
 Additional Functions
 
