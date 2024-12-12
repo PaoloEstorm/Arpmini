@@ -57,4 +57,4 @@ A simulated demo of Arpmini+ can be explored on Wokwi via the link https://wokwi
 
 Schematic and PCB design: https://oshwlab.com/estorm/miniseq
 
-Note: Arpmini+ uses a modified version of the GyverOLED library by @AlexGyver. Be sure to use the attached files for proper character display.
+Note: Arpmini+ uses a modified version of the GyverOLED library by @AlexGyver. Be sure to use the attached files for proper character rendering.
