@@ -537,7 +537,7 @@ void RunClock() {  // main clock
 
   if (countTicks == 2) {
     if (menunumber == 0) {
-      if (modeselect != 4 /*&& playing*/ && !recording) digitalWrite(yellowled, LOW);  // turn yellowled off before 2 ticks - Tempo indicator
+      if (modeselect != 4 && (!recording || (recording && playing))) digitalWrite(yellowled, LOW);  // turn yellowled off before 2 ticks - Tempo indicator
       else if (modeselect == 4) {
         AllLedsOff();
       }
