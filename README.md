@@ -4,8 +4,8 @@ Arpmini+ is a compact MIDI device, similar in size to a keychain, offering advan
 
 Its features include:
 
-    Intuitive interface with four backlit buttons (red, yellow, green, blue), each assigned to a specific function for quick and easy control. All settings can be managed through the menu, which is accessed by holding the green button for 4 seconds from the main screen.
-    0.96-inch OLED screen to display real-time information.
+    Intuitive interface with four backlit buttons (red, yellow, green, blue), each assigned to a specific function for quick and easy control.
+    All settings can be managed through the menu, which is accessed by holding the green button for 1 second from the main screen.
     Two independent MIDI inputs protected by optocouplers, ensuring reliability and electrical isolation.
     Two MIDI outputs, which share the same signal to control multiple MIDI devices simultaneously.
     Audio control through an integrated buzzer for interface sounds, confirmations, and metronome.
