@@ -11,10 +11,7 @@ Its features include:
     Audio control through an integrated buzzer for interface sounds, confirmations, and metronome.
     The 4 buttons of Arpmini+ can be mapped and controlled by an external MIDI controller via MIDI CC, offering greater versatility and remote control.
     You can save up to 6 songs in memory (EEPROM), recalling and playing them at any time. In addition to songs, various global settings can also be saved, including:
-        the MIDI channel,
-        audio alert settings,
-        MIDI input and output port settings,
-        MIDI CC mapping for the buttons.
+    the MIDI channel, audio alert settings, MIDI input and output port settings and MIDI CC mapping for the buttons.
 
 At the core of Arpmini+ is an Arduino Pro Micro with an ATmega32u4 microcontroller, which provides USB MIDI compatibility and flexibility for future expansions.
 
