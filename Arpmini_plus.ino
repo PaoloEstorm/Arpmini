@@ -21,7 +21,7 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-// Inspired by the "arduino based midi sequencer" project from Brendan Clarke
+// Inspired by the "arduino based midi sequencer" project by Brendan Clarke
 // https://brendanclarke.com/wp/2014/04/23/arduino-based-midi-sequencer/
 
 // system
