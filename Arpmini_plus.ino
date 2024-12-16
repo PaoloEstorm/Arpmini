@@ -1,5 +1,5 @@
 /*!
- *  @file       Arpmini.ino
+ *  @file       Arpmini_plus.ino
  *  Project     Estorm - Arpmini+
  *  @brief      MIDI Sequencer & Arpeggiator
  *  @version    1.96
