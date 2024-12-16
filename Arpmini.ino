@@ -2485,7 +2485,7 @@ void ButtonsCommands(bool anystate) {  // manage the buttons's commands and func
         newcurrentSeq = currentSeq;
         modeselect = premodeselect;
         ScreenBlink();
-        //PrintMainScreen();
+        PrintMainScreen();
         //newgreenstate = false;
       }
     }
