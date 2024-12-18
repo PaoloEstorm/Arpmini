@@ -42,7 +42,8 @@ Musical Scales
 
 Arpmini+ Modes
 
-![Tavola disegno 13](https://github.com/user-attachments/assets/443ddb94-6dd9-4fc4-ae67-83bd67afdbf7)
+![All](https://github.com/user-attachments/assets/68c1cb12-e384-424e-9e43-bb253b8aad30)
+
 
     Arp Mode: Arpeggiates the played notes based on the selected arpeggio mode.
     Rec Mode: Records and plays back up to 4 patterns of variable length, with a maximum of 32 notes each.
