@@ -43,7 +43,7 @@ bool confirmsound = false;  // at button press, play the confirmation sound inst
 
 // screen
 #define USE_MICRO_WIRE
-#define OLED_SPI_SPEED 8000000ul  // sun SPI at 8MHz
+#define OLED_SPI_SPEED 8000000ul  // set SPI at 8MHz
 #include "GyverOLED.h"
 #define RES 19  // SPI reset pin
 #define DC 20   // SPI DC pin
