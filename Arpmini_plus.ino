@@ -2,7 +2,7 @@
  *  @file       Arpmini_plus.ino
  *  Project     Estorm - Arpmini+
  *  @brief      MIDI Sequencer & Arpeggiator
- *  @version    1.96
+ *  @version    1.97
  *  @author     Paolo Estorm
  *  @date       09/12/24
  *  @license    GPL v3.0 
@@ -25,7 +25,7 @@
 // https://brendanclarke.com/wp/2014/04/23/arduino-based-midi-sequencer/
 
 // system
-char version[] = "1.96";
+char version[] = "1.97";
 
 // leds
 #define redled 3     // red led pin
@@ -78,10 +78,11 @@ bool yellowstate = false;   // is yellowbutton pressed?
 bool greenstate = false;    // is greenbutton pressed?
 bool bluestate = false;     // is bluebutton pressed?
 
-uint8_t redbuttonCC;     // cc for external control
-uint8_t yellowbuttonCC;  // cc for external control
-uint8_t bluebuttonCC;    // cc for external control
-uint8_t greenbuttonCC;   // cc for external control
+uint8_t redbuttonCC;             // cc for external control
+uint8_t yellowbuttonCC;          // cc for external control
+uint8_t bluebuttonCC;            // cc for external control
+uint8_t greenbuttonCC;           // cc for external control
+int8_t numbuttonspressedCC = 0;  // number of externally pressed buttons
 
 uint8_t mapButtonSelect = 1;  // 1=red, 2=yellow, 3=blue, 4=green
 
@@ -895,29 +896,38 @@ void HandleCC(uint8_t channel, uint8_t cc, uint8_t value) {  // handle midi CC m
       }
 
       else {  // external control
+
         if (cc == redbuttonCC) {
           redstate = value;
-          EnableButtons = !redstate;
+          if (redstate) numbuttonspressedCC++;
+          else numbuttonspressedCC--;
           ButtonsCommands(redstate);
         }
 
         else if (cc == yellowbuttonCC) {
           yellowstate = value;
-          EnableButtons = !yellowstate;
+          if (yellowstate) numbuttonspressedCC++;
+          else numbuttonspressedCC--;
           ButtonsCommands(yellowstate);
         }
 
         else if (cc == bluebuttonCC) {
           bluestate = value;
-          EnableButtons = !bluestate;
+          if (bluestate) numbuttonspressedCC++;
+          else numbuttonspressedCC--;
           ButtonsCommands(bluestate);
         }
 
         else if (cc == greenbuttonCC) {
           greenstate = value;
-          EnableButtons = !greenstate;
+          if (greenstate) numbuttonspressedCC++;
+          else numbuttonspressedCC--;
           ButtonsCommands(greenstate);
         }
+
+        if (numbuttonspressedCC > 0) EnableButtons = false;
+        else EnableButtons = true;
+        if (numbuttonspressedCC < 0) numbuttonspressedCC = 0;
       }
     }
 
@@ -2309,28 +2319,35 @@ void DebounceButtons() {  // debounce the buttons
 
   if ((GreenReading != lastGreenDeb) || (YellowReading != lastYellowDeb) || (RedReading != lastRedDeb) || (BlueReading != lastBlueDeb)) {
     lastDebounceTime = millis();
+
+    if (!EnableButtons) {  // gain control of internal buttons. without this, in case midi signal is lost during external control, internal buttons may stay disabled
+      EnableButtons = true;
+      numbuttonspressedCC = 0;
+    }
   }
 
   if ((millis() - lastDebounceTime) > debounceDelay) {
 
-    if (GreenReading != greenstate) {
-      greenstate = GreenReading;
-      if (EnableButtons) ButtonsCommands(greenstate);
-    }
+    if (EnableButtons) {
+      if (GreenReading != greenstate) {
+        greenstate = GreenReading;
+        ButtonsCommands(greenstate);
+      }
 
-    else if (YellowReading != yellowstate) {
-      yellowstate = YellowReading;
-      if (EnableButtons) ButtonsCommands(yellowstate);
-    }
+      else if (YellowReading != yellowstate) {
+        yellowstate = YellowReading;
+        ButtonsCommands(yellowstate);
+      }
 
-    else if (RedReading != redstate) {
-      redstate = RedReading;
-      if (EnableButtons) ButtonsCommands(redstate);
-    }
+      else if (RedReading != redstate) {
+        redstate = RedReading;
+        ButtonsCommands(redstate);
+      }
 
-    else if (BlueReading != bluestate) {
-      bluestate = BlueReading;
-      if (EnableButtons) ButtonsCommands(bluestate);
+      else if (BlueReading != bluestate) {
+        bluestate = BlueReading;
+        ButtonsCommands(bluestate);
+      }
     }
   }
 
