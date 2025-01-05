@@ -2,7 +2,7 @@
  *  @file       Arpmini_plus.ino
  *  Project     Estorm - Arpmini+
  *  @brief      MIDI Sequencer & Arpeggiator
- *  @version    1.97
+ *  @version    1.98
  *  @author     Paolo Estorm
  *  @date       09/12/24
  *  @license    GPL v3.0 
@@ -25,7 +25,7 @@
 // https://brendanclarke.com/wp/2014/04/23/arduino-based-midi-sequencer/
 
 // system
-char version[] = "1.97";
+char version[] = "1.98";
 
 // leds
 #define redled 3     // red led pin
@@ -110,12 +110,13 @@ int8_t tSignature = 4;          // time signature for led indicator/metronome an
 int8_t GlobalDivison = 4;       // how many steps per beat
 int8_t countBeat;               // keep track of the time beats
 int8_t countStep;               // keep track of note steps in seq/song mode
+int8_t IntercountStep;          // keep track of note steps while inter-recording
 int8_t countTicks;              // the frame number (frame=external clock or 24 frames per quarter note)
 uint8_t ticksPerStep = 6;       // how many clock ticks to count before the sequencer moves to another step.
 uint8_t flip = 6;               // part of the frameperstep's flipflop
 uint8_t flop = 6;               // part of the frameperstep's flipflop
 bool swing = false;             // is swing enabled?
-uint8_t BPM = 120;              // beats per minute for internalclock - min 50, max 250 bpm
+uint8_t BPM = 120;              // beats per minute for internalclock - min 20, max 250 bpm
 bool playing = false;           // is the sequencer playing?
 uint8_t snapmode = 1;           // when play/stop the next sequence in live mode. 0=pattern, 1=up-beat, 2=beat
 bool start = false;             // dirty fix for a ableton live 10 bug. becomes true once at sequence start and send a sync command
@@ -214,6 +215,10 @@ const char downcursor[] = "_";
 const char plus[] = "+";
 const char minus[] = "-";
 const char printx[] = "X";
+const char printarpmode[] = " ARP MODE ";
+const char printrecmode[] = " REC MODE ";
+const char printsongmode[] = " SONG MODE ";
+const char printlivemode[] = " LIVE MODE ";
 
 void setup() {  // initialization setup
 
@@ -495,7 +500,7 @@ void Bip(uint8_t type) {  // sounds
   }
 }
 
-void SetBPM(uint8_t tempo) {  // change Timer1 speed to match BPM, 50-250
+void SetBPM(uint8_t tempo) {  // change Timer1 speed to match BPM, 20-250
 
   OCR1A = (25 * (25000 / tempo));  // 2.5*[(16MHz/prescaler)/BPM]
 }
@@ -551,12 +556,6 @@ void RunClock() {  // main clock
   if (modeselect < 3) {  // not song & live mode
     if (trigMode > 0 && numNotesHeld == 0 && !sustain) muted = true;
   }
-
-  // if (modeselect != 4) {
-  //   if (menunumber == 0 && !playing && !recording) {
-  //     digitalWrite(yellowled, LOW);
-  //   }
-  // }
 
   for (uint8_t i = 0; i < queueLength; i++) {  // decrement crons
     if (cronLength[i] > -1) {
@@ -774,14 +773,12 @@ void Metronome() {  // manage the metronome
 void HandleStart() {  // start message - re-start the sequence
 
   if (sendrealtime) {
-    //  MIDI.sendRealTime(midi::Clock);
     MIDI.sendRealTime(midi::Start);
   }
 
   internalClock = false;
   playing = true;
   Startposition();
-  // start = true;  // to make ableton live happy
 
   if (menunumber == 0) {  // switch on display and restart screen-on timer
     StartScreenTimer = true;
@@ -896,47 +893,27 @@ void HandleCC(uint8_t channel, uint8_t cc, uint8_t value) {  // handle midi CC m
       }
 
       else {  // external control
+        bool *state = nullptr;
 
-        if (cc == redbuttonCC) {
-          redstate = value;
-          if (redstate) numbuttonspressedCC++;
-          else numbuttonspressedCC--;
-          ButtonsCommands(redstate);
+        if (cc == redbuttonCC) state = &redstate;
+        else if (cc == yellowbuttonCC) state = &yellowstate;
+        else if (cc == bluebuttonCC) state = &bluestate;
+        else if (cc == greenbuttonCC) state = &greenstate;
+
+        if (state) {
+          *state = value;
+          numbuttonspressedCC += (*state ? 1 : -1);
+          ButtonsCommands(*state);
         }
 
-        else if (cc == yellowbuttonCC) {
-          yellowstate = value;
-          if (yellowstate) numbuttonspressedCC++;
-          else numbuttonspressedCC--;
-          ButtonsCommands(yellowstate);
-        }
-
-        else if (cc == bluebuttonCC) {
-          bluestate = value;
-          if (bluestate) numbuttonspressedCC++;
-          else numbuttonspressedCC--;
-          ButtonsCommands(bluestate);
-        }
-
-        else if (cc == greenbuttonCC) {
-          greenstate = value;
-          if (greenstate) numbuttonspressedCC++;
-          else numbuttonspressedCC--;
-          ButtonsCommands(greenstate);
-        }
-
-        if (numbuttonspressedCC > 0) EnableButtons = false;
-        else EnableButtons = true;
+        EnableButtons = (numbuttonspressedCC == 0);
         if (numbuttonspressedCC < 0) numbuttonspressedCC = 0;
       }
     }
 
     else {  // sustain pedal cc
-
-      if (!playing) MIDI.sendControlChange(cc, value, channel);  // pass through sustain pedal cc
-      else {
-        sustain = value;
-      }
+      sustain = value;
+      if (!playing || (playing && trigMode == 0)) MIDI.sendControlChange(cc, value, channel);  // pass through sustain pedal cc
     }
   } else MIDI.sendControlChange(cc, value, channel);
 }
@@ -945,7 +922,7 @@ void HandleNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle 
 
   if (channel == midiChannel) {
 
-    if (!playing) {  // bypass if not playing
+    if (!playing && !recording) {  // bypass if not playing
       note = TransposeAndScale(note);
       MIDI.sendNoteOn(note, velocity, channel);
     }
@@ -1009,7 +986,7 @@ void HandleNoteOff(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle
 
   if (channel == midiChannel) {
 
-    if (!playing) {  // pass trough note off messages
+    if (!playing && !recording) {  // pass trough note off messages
       note = TransposeAndScale(note);
       MIDI.sendNoteOff(note, velocity, channel);
     }
@@ -1105,7 +1082,7 @@ uint8_t TransposeAndScale(int8_t note) {  // apply transposition and scale
 
 void QueueNote(int8_t note) {  // send notes to the midi port
 
-  const int8_t noteMaxLength = 100;  // this number gets put in the cronLength buffer when the sequencer generates a note
+  const uint8_t noteMaxLength = 100;  // this number gets put in the cronLength buffer when the sequencer generates a note
   bool queued = 0;                   // has current note been queued?
   int8_t shortest = noteMaxLength;
   int8_t shortIdx = 0;
@@ -1115,6 +1092,16 @@ void QueueNote(int8_t note) {  // send notes to the midi port
   }
 
   note = TransposeAndScale(note);
+
+  if (modeselect == 1 && recording) {  // inter-recording
+    IntercountStep++;
+    noteSeq[currentSeq][IntercountStep] = note;
+    if (IntercountStep == seqLength) {
+      IntercountStep = 0;
+      recording = false;
+      ManageRecording();
+    }
+  }
 
   for (uint8_t i = 0; (i < queueLength) && (!queued); i++) {  // check avail queue
     if ((cronLength[i] < 0) || (cronNote[i] == note)) {       // free queue slot
@@ -1172,85 +1159,79 @@ void SetArpStyle(uint8_t style) {  // 1=up, 2=down, 3=up-down, 4=down-up, 5=up+d
   uint8_t arpdown = (numActiveNotes + (countStep - 1)) % numActiveNotes;
   uint8_t arpcountplus = 1 + (arpcount % arprepeat);
 
-  if (style == 1) {  // up
-    countStep = arpup;
-    if (countStep == 0) arpcount = arpcountplus;
-  }
-
-  else if (style == 2) {  // down
-    countStep = arpdown;
-    if (countStep == (numActiveNotes - 1)) arpcount = arpcountplus;
-  }
-
-  else if (style == 3) {  // up-down
-    if (ArpDirection) {
+  switch (style) {
+    case 1:  // up
       countStep = arpup;
       if (countStep == 0) arpcount = arpcountplus;
-      if ((countStep + 1) == numActiveNotes) ArpDirection = false;
-    } else {
-      countStep = arpdown;
-      if (countStep == 0) arpcount = arpcountplus;
-      if (countStep == 0) ArpDirection = true;
-    }
-  }
+      break;
 
-  else if (style == 4) {  // down-up
-    if (ArpDirection) {
+    case 2:  // down
       countStep = arpdown;
       if (countStep == (numActiveNotes - 1)) arpcount = arpcountplus;
-      if (countStep == 0) ArpDirection = false;
-    } else {
-      countStep = arpup;
-      if (countStep == (numActiveNotes - 1)) arpcount = arpcountplus;
-      if ((countStep + 1) == numActiveNotes) ArpDirection = true;
-    }
-  }
+      break;
 
-  else if (style == 5) {  // up+down
-    if (ArpDirection) {
-      countStep++;
-      if (countStep == 0) arpcount = arpcountplus;
-      if (countStep > (numActiveNotes - 1)) {
-        countStep = numActiveNotes - 1;
-        ArpDirection = false;
+    case 3:  // up-down
+      if (ArpDirection) {
+        countStep = arpup;
+        if (countStep == 0) arpcount = arpcountplus;
+        if ((countStep + 1) == numActiveNotes) ArpDirection = false;
+      } else {
+        countStep = arpdown;
+        if (countStep == 0) arpcount = arpcountplus;
+        if (countStep == 0) ArpDirection = true;
       }
-    }
+      break;
 
-    else if (!ArpDirection) {
-      countStep--;
-      if (countStep < 0) {
-        countStep = 0;
-        ArpDirection = true;
-        arpcount = arpcountplus;
+    case 4:  // down-up
+      if (ArpDirection) {
+        countStep = arpdown;
+        if (countStep == (numActiveNotes - 1)) arpcount = arpcountplus;
+        if (countStep == 0) ArpDirection = false;
+      } else {
+        countStep = arpup;
+        if (countStep == (numActiveNotes - 1)) arpcount = arpcountplus;
+        if ((countStep + 1) == numActiveNotes) ArpDirection = true;
       }
-    }
+      break;
 
-  }
-
-  else if (style == 6) {  // down+up
-    if (ArpDirection) {
-      countStep--;
-      if (countStep == (numActiveNotes - 1)) arpcount = arpcountplus;
-      if (countStep < 0) {
-        countStep = 0;
-        ArpDirection = false;
+    case 5:  // up+down
+      if (ArpDirection) {
+        countStep++;
+        if (countStep > (numActiveNotes - 1)) {
+          countStep = numActiveNotes - 1;
+          ArpDirection = false;
+        }
+      } else {
+        countStep--;
+        if (countStep < 0) {
+          countStep = 0;
+          ArpDirection = true;
+          arpcount = arpcountplus;
+        }
       }
-    }
+      break;
 
-    else if (!ArpDirection) {
-      countStep++;
-      if (countStep > (numActiveNotes - 1)) {
-        countStep = numActiveNotes - 1;
-        ArpDirection = true;
-        arpcount = arpcountplus;
+    case 6:  // down+up
+      if (ArpDirection) {
+        countStep--;
+        if (countStep < 0) {
+          countStep = 0;
+          ArpDirection = false;
+        }
+      } else {
+        countStep++;
+        if (countStep > (numActiveNotes - 1)) {
+          countStep = numActiveNotes - 1;
+          ArpDirection = true;
+          arpcount = arpcountplus;
+        }
       }
-    }
+      break;
 
-  }
-
-  else if (style == 7) {  // random
-    countStep = random(0, numActiveNotes);
-    arpcount = random(1, arprepeat + 1);
+    case 7:  // random
+      countStep = random(0, numActiveNotes);
+      arpcount = random(1, arprepeat + 1);
+      break;
   }
 
   if (arprepeat < 2) arpcount = 1;
@@ -1267,7 +1248,7 @@ void PrintMainScreen() {  // print menu 0 to the screen
 
   if (modeselect == 1) {  // arp mode screen
     oled.setCursorXY(2, 0);
-    oled.print(F(" ARP MODE "));
+    oled.print(printarpmode);
     oled.invertText(0);
     oled.setScale(3);
     if (arpstyle == 1) {
@@ -1305,7 +1286,7 @@ void PrintMainScreen() {  // print menu 0 to the screen
 
   else if (modeselect == 2) {  // rec mode screen
     oled.setCursorXY(3, 0);
-    oled.print(F(" REC MODE "));
+    oled.print(printrecmode);
     oled.invertText(0);
     oled.setCursorXY(36, 16);
     oled.print(seq);
@@ -1319,7 +1300,7 @@ void PrintMainScreen() {  // print menu 0 to the screen
   }
 
   else if (modeselect == 3) {  // song mode screen
-    oled.print(F(" SONG MODE "));
+    oled.print(printsongmode);
     oled.invertText(0);
     oled.setCursorXY(0, 16);
     for (uint8_t i = 0; i < patternLength; i++) {
@@ -1331,7 +1312,7 @@ void PrintMainScreen() {  // print menu 0 to the screen
   }
 
   else if (modeselect == 4) {  // live mode screen
-    oled.print(F(" LIVE MODE "));
+    oled.print(printlivemode);
     oled.invertText(0);
     for (uint8_t i = 0; i < 4; ++i) {
       uint8_t x = (i < 2) ? 13 : 102;
@@ -1754,7 +1735,7 @@ void PrintSubmenu(uint8_t item) {  // print menu 2 to the screen
         if (trigMode == 0) oled.print(F("HOLD"));
         else if (trigMode == 1) {
           oled.print(F("GATE"));
-          numActiveNotes = 0;
+          //numActiveNotes = 0;
         } else if (trigMode == 2) oled.print(F("RETRIG"));
       }
 
@@ -1916,7 +1897,7 @@ void SubmenuSettings(uint8_t item, bool dir) {  // handles changing settings in 
         else BPM -= 5;
       }
       if (BPM > 250) BPM = 250;
-      if (BPM < 50) BPM = 50;
+      if (BPM < 20) BPM = 20;
       SetBPM(BPM);
       break;
 
@@ -2207,6 +2188,17 @@ void PrintConfirmationPopup() {  // print confirmation popup in load-save menu
   oled.invertText(0);
 }
 
+void PrintInterRecordingPopup() {  // seq. select popup
+
+  oled.setScale(2);
+  oled.invertText(1);
+  oled.setCursorXY(28, 33);
+  oled.print(space);
+  oled.print(seq);
+  oled.print(newcurrentSeq + 1);
+  oled.invertText(0);
+}
+
 void ClearSeqPatternArray() {  // clear all Pattern and Sequences arrays
 
   for (uint8_t i = 0; i < patternLength; i++) {  // clean SongPattern array
@@ -2382,7 +2374,7 @@ void ButtonsCommands(bool anystate) {  // manage the buttons's commands and func
 
   if (menunumber == 0) {  // main screen
 
-    if (newgreenstate) {
+    if (newgreenstate) {  // go to menu
       greentristate = 2;
       StartMenuTimer = true;
     }
@@ -2424,9 +2416,20 @@ void ButtonsCommands(bool anystate) {  // manage the buttons's commands and func
           StartAndStop();
         }
 
-        if (!blueispressed && newredstate && modeselect > 1) {  // start/stop recording
-          recording = !recording;
-          ManageRecording();
+        if (!blueispressed && newredstate) {  // start/stop recording
+
+          if ((modeselect == 3 && !playing) || modeselect == 1) {
+            if (!recording) {
+              menunumber = 4;
+              PrintInterRecordingPopup();
+            } else {
+              recording = false;
+              ManageRecording();
+            }
+          } else {
+            recording = !recording;
+            ManageRecording();
+          }
         }
       }
 
@@ -2575,6 +2578,34 @@ void ButtonsCommands(bool anystate) {  // manage the buttons's commands and func
         confirmation = false;
         PrintLoadSaveMenu(savemode);
       }
+    }
+  }
+
+  else if (menunumber == 4) {  // Inter-Recording Popup
+
+    if (newbluestate) {
+      menunumber = 0;
+      PrintMainScreen();
+    }
+
+    else if (newgreenstate) {
+      menunumber = 0;
+      currentSeq = newcurrentSeq;
+      pattern = currentSeq;
+      PrintMainScreen();
+      IntercountStep = -1;
+      recording = true;
+      ManageRecording();
+    }
+
+    else if (newyellowstate) {
+      if (newcurrentSeq > 0) newcurrentSeq--;
+      PrintInterRecordingPopup();
+    }
+
+    else if (newredstate) {
+      if (newcurrentSeq < (numberSequences - 1)) newcurrentSeq++;
+      PrintInterRecordingPopup();
     }
   }
 
