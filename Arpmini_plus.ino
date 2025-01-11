@@ -2,7 +2,7 @@
  *  @file       Arpmini_plus.ino
  *  Project     Estorm - Arpmini+
  *  @brief      MIDI Sequencer & Arpeggiator
- *  @version    2.00
+ *  @version    2.01
  *  @author     Paolo Estorm
  *  @date       09/12/24
  *  @license    GPL v3.0 
@@ -27,7 +27,7 @@
 #include "Vocabulary.h"
 
 // system
-char version[] = "2.00";
+char version[] = "2.01";
 
 // leds
 #define redled 3     // red led pin
@@ -153,9 +153,10 @@ bool chainrec = false;                          // sequential recording in song 
 bool lockpattern = false;                       // if true block the current pattern from sequencing
 
 // notes
-int8_t transpose = 0;            // pitch transposition: -12 to +12
-uint8_t transposemode = 0;       // 0=before scale, 1=scale root, 2=after scale
+int8_t pitch = 0;                // pitch transposition: -12 to +12
+bool pitchmode = false;          // 0=before scale, 1=scale root
 uint8_t scale = 0;               // 0=linear, 1=penta. major, 2=penta. minor, 3=major, 4=minor, 5=arabic, 6=locrian, 7=lydian, 8=dorian, 9=inverted, 10=hexa.
+int8_t posttranspose = 0;        // post-scale pitch transposition: -12 to +12
 uint8_t noteLengthSelect = 3;    // set the notelength, 0=random, 1=10%, 2=30%, 3=50%, 4=80%, 5=100%, 6=120%
 bool sortnotes = true;           // sort the ActiveNotes array?
 bool muted = false;              // temporarily suspend playing any notes from the sequencer
@@ -991,13 +992,14 @@ uint8_t SetScale(int8_t note, uint8_t scale) {  // filter incoming note to fit i
   return note + offset;
 }
 
-uint8_t TransposeAndScale(int8_t note) {  // apply transposition and scale
+uint8_t TransposeAndScale(short int note) {  // apply transposition and scale
 
-  if (transposemode == 0) note = SetScale(note + transpose, scale);
-  if (scale > 0 && transposemode == 1) note = note - transpose;
-  if (transposemode > 0) note = SetScale(note, scale) + transpose;
+  if (!pitchmode) note = SetScale(note + pitch, scale);
+  else note = SetScale(note - pitch, scale) + pitch;
 
-  if (note > 126) {  // if note gets transposed out of range, raise or lower an octave
+  note = note + posttranspose;  // apply post-transposition
+
+  if (note > 127) {  // if note gets transposed out of range, raise or lower an octave
     note = note - 12;
   } else if (note < 0) {
     note = note + 12;
@@ -1345,7 +1347,7 @@ void PrintMenu(uint8_t item) {  // print menu 1 to the screen
     case 2:  // seq.select
       if (modeselect == 1) {
         oled.println(arp);
-        oled.print(printmodes);
+        oled.print(printstyle);
       }
 
       else if (modeselect == 2) {
@@ -1370,7 +1372,7 @@ void PrintMenu(uint8_t item) {  // print menu 1 to the screen
       break;
 
     case 4:  // pitch
-      oled.println(pitch);
+      oled.println(printpitch);
       break;
 
     case 5:  // scale
@@ -1483,7 +1485,7 @@ void PrintSubmenu(uint8_t item) {  // print menu 2 to the screen
 
     case 2:  // arp style/seq.select/edit song/start-stop live
       if (modeselect == 1) {
-        oled.println(printmodes);
+        oled.println(printstyle);
 
         switch (arpstyle) {
           case 1:
@@ -1561,67 +1563,65 @@ void PrintSubmenu(uint8_t item) {  // print menu 2 to the screen
       break;
 
     case 4:  // pitch
-      oled.println(pitch);
-      oled.print(transpose);
+      oled.println(printpitch);
+      if (pitch > 0) oled.print(plus);
+      oled.print(pitch);
 
-      if (scale != 0) {
-        if (transposemode == 1) {
-          oled.print(space);
+      // if (scale != 0) {
+      if (pitchmode) {
+        oled.print(space);
 
-          uint8_t normalizedTranspose = (transpose % 12 + 12) % 12;  // normalize the transpose value
+        uint8_t normalizedTranspose = (pitch % 12 + 12) % 12;  // normalize the transpose value
 
-          switch (normalizedTranspose) {
-            case 0:
-              oled.print(F("C"));
-              break;
-            case 1:
-              oled.print(F("C#"));
-              break;
-            case 2:
-              oled.print(F("D"));
-              break;
-            case 3:
-              oled.print(F("D#"));
-              break;
-            case 4:
-              oled.print(F("E"));
-              break;
-            case 5:
-              oled.print(F("F"));
-              break;
-            case 6:
-              oled.print(F("F#"));
-              break;
-            case 7:
-              oled.print(F("G"));
-              break;
-            case 8:
-              oled.print(F("G#"));
-              break;
-            case 9:
-              oled.print(F("A"));
-              break;
-            case 10:
-              oled.print(F("A#"));
-              break;
-            case 11:
-              oled.print(F("B"));
-              break;
-          }
-        }
-        oled.setScale(2);
-        oled.setCursorXY(0, 48);
-        if (transposemode == 0) {
-          oled.print(F("PRE-"));
-          oled.print(printscale);
-        } else if (transposemode == 1) {
-          oled.print(printscale);
-          oled.print(F("-ROOT"));
-        } else if (transposemode == 2) {
-          oled.print(F("POST-"));
-          oled.print(printscale);
+        switch (normalizedTranspose) {
+          case 0:
+            oled.print(F("C"));
+            break;
+          case 1:
+            oled.print(F("C#"));
+            break;
+          case 2:
+            oled.print(F("D"));
+            break;
+          case 3:
+            oled.print(F("D#"));
+            break;
+          case 4:
+            oled.print(F("E"));
+            break;
+          case 5:
+            oled.print(F("F"));
+            break;
+          case 6:
+            oled.print(F("F#"));
+            break;
+          case 7:
+            oled.print(F("G"));
+            break;
+          case 8:
+            oled.print(F("G#"));
+            break;
+          case 9:
+            oled.print(F("A"));
+            break;
+          case 10:
+            oled.print(F("A#"));
+            break;
+          case 11:
+            oled.print(F("B"));
+            break;
         }
       }
+      oled.setScale(2);
+      oled.setCursorXY(0, 48);
+      if (!pitchmode) {
+        oled.print(F("PRE-"));
+        oled.print(printscale);
+      } else {
+        oled.print(printscale);
+        oled.print(F("-ROOT"));
+      }
+      // }
       break;
 
     case 5:  // scale
@@ -1664,6 +1664,11 @@ void PrintSubmenu(uint8_t item) {  // print menu 2 to the screen
           oled.print(F("HEXATON"));
           break;
       }
+      oled.setScale(2);
+      oled.setCursorXY(0, 48);
+      oled.print(F("TRANSP."));
+      if (posttranspose > 0) oled.print(plus);
+      oled.print(posttranspose);
       break;
 
     case 6:  // note lenght
@@ -1886,25 +1891,33 @@ void SubmenuSettings(uint8_t item, bool dir) {  // handles changing settings in 
     case 4:  // pitch
       if (!greenstate) {
         if (dir == HIGH) {
-          if (transpose < 12) transpose++;
+          if (pitch < 12) pitch++;
         } else {
-          if (transpose > -12) transpose--;
+          if (pitch > -12) pitch--;
         }
-      } else if (greenstate && scale > 0) {
+      } else {
         if (dir == HIGH) {
-          if (transposemode < 2) transposemode++;
+          pitchmode = true;
         } else {
-          if (transposemode > 0) transposemode--;
+          pitchmode = false;
         }
       }
       if (!playing) AllNotesOff();
       break;
 
     case 5:  // scale
-      if (dir == LOW) {
-        if (scale < 11) scale++;
+      if (!greenstate) {
+        if (dir == LOW) {
+          if (scale < 11) scale++;
+        } else {
+          if (scale > 0) scale--;
+        }
       } else {
-        if (scale > 0) scale--;
+        if (dir == HIGH) {
+          if (posttranspose < 12) posttranspose++;
+        } else {
+          if (posttranspose > -12) posttranspose--;
+        }
       }
       if (!playing) AllNotesOff();
       break;
@@ -2213,7 +2226,8 @@ void BakeSequence() {  // bake transpose & scale in to current seq / all seqs
   }
 
   scale = 0;
-  transpose = 0;
+  pitch = 0;
+  posttranspose = 0;
 }
 
 void LoadSave(uint8_t mode, uint8_t number) {  // (bake/new/save/load/delete, slot number 0-5)
@@ -2248,6 +2262,10 @@ void LoadSave(uint8_t mode, uint8_t number) {  // (bake/new/save/load/delete, sl
 
     if (mode == 2) {  // save song
       EEPROM.update((eepromaddress(16, number)), 1);
+      EEPROM.update((eepromaddress(17, number)), pitchmode);
+      EEPROM.update((eepromaddress(18, number)), pitch);
+      EEPROM.update((eepromaddress(19, number)), scale);
+      EEPROM.update((eepromaddress(20, number)), posttranspose);
       EEPROM.update((eepromaddress(21, number)), seqLength);
       EEPROM.update((eepromaddress(22, number)), BPM);
       EEPROM.update((eepromaddress(23, number)), swing);
@@ -2270,6 +2288,10 @@ void LoadSave(uint8_t mode, uint8_t number) {  // (bake/new/save/load/delete, sl
         lockpattern = false;
         pattern = 0;
 
+        pitchmode = EEPROM.read(eepromaddress(17, number));
+        pitch = EEPROM.read(eepromaddress(18, number));
+        scale = EEPROM.read(eepromaddress(19, number));
+        posttranspose = EEPROM.read(eepromaddress(20, number));
         seqLength = EEPROM.read(eepromaddress(21, number));
         BPM = EEPROM.read(eepromaddress(22, number));
         swing = EEPROM.read(eepromaddress(23, number));
