@@ -2,7 +2,7 @@
  *  @file       Arpmini_plus.ino
  *  Project     Estorm - Arpmini+
  *  @brief      MIDI Sequencer & Arpeggiator
- *  @version    2.01
+ *  @version    2.02
  *  @author     Paolo Estorm
  *  @date       09/12/24
  *  @license    GPL v3.0 
@@ -27,7 +27,7 @@
 #include "Vocabulary.h"
 
 // system
-char version[] = "2.01";
+char version[] = "2.02";
 
 // leds
 #define redled 3     // red led pin
@@ -994,7 +994,7 @@ uint8_t SetScale(int8_t note, uint8_t scale) {  // filter incoming note to fit i
 
 uint8_t TransposeAndScale(short int note) {  // apply transposition and scale
 
-  if (!pitchmode) note = SetScale(note + pitch, scale);
+  if ((!pitchmode) || (pitchmode && scale == 0)) note = SetScale(note + pitch, scale);
   else note = SetScale(note - pitch, scale) + pitch;
 
   note = note + posttranspose;  // apply post-transposition
@@ -1567,7 +1567,6 @@ void PrintSubmenu(uint8_t item) {  // print menu 2 to the screen
       if (pitch > 0) oled.print(plus);
       oled.print(pitch);
 
-      // if (scale != 0) {
       if (pitchmode) {
         oled.print(space);
 
@@ -1621,7 +1620,6 @@ void PrintSubmenu(uint8_t item) {  // print menu 2 to the screen
         oled.print(printscale);
         oled.print(F("-ROOT"));
       }
-      // }
       break;
 
     case 5:  // scale
@@ -1852,7 +1850,7 @@ void SubmenuSettings(uint8_t item, bool dir) {  // handles changing settings in 
         if (dir == HIGH) {
           if (currentSeq > 0) currentSeq--;
         } else {
-          if (currentSeq < 3) currentSeq++;
+          if (currentSeq < (numberSequences - 1)) currentSeq++;
         }
       }
 
@@ -2211,14 +2209,14 @@ void ClearSeqPatternArray() {  // clear all Pattern and Sequences arrays
 
 void BakeSequence() {  // bake transpose & scale in to current seq / all seqs
 
-  if ((modeselect == 2) || (modeselect == 3 && lockpattern)) {
+  if ((modeselect == 2) || (modeselect == 3 && lockpattern)) {  // bake current Seq array
     for (uint8_t i = 0; i < maxSeqLength; i++) {
       if (noteSeq[currentSeq][i] > 0) noteSeq[currentSeq][i] = TransposeAndScale(noteSeq[currentSeq][i]);
     }
   }
 
   else {
-    for (uint8_t j = 0; j < numberSequences; j++) {  // clean Seq arrays
+    for (uint8_t j = 0; j < numberSequences; j++) {  // bake all Seq arrays
       for (uint8_t i = 0; i < maxSeqLength; i++) {
         if (noteSeq[j][i] > 0) noteSeq[j][i] = TransposeAndScale(noteSeq[j][i]);
       }
@@ -2324,59 +2322,51 @@ void LoadSave(uint8_t mode, uint8_t number) {  // (bake/new/save/load/delete, sl
   }
 }
 
-void DebounceButtons() {  // debounce the buttons
+void DebounceButtons() {
 
-  static bool lastRedDeb = false;     // the previous reading from the input pin
-  static bool lastYellowDeb = false;  // the previous reading from the input pin
-  static bool lastGreenDeb = false;   // the previous reading from the input pin
-  static bool lastBlueDeb = false;    // the previous reading from the input pin
+  static bool lastGreenDeb = false;
+  static bool lastYellowDeb = false;
+  static bool lastRedDeb = false;
+  static bool lastBlueDeb = false;
+  static unsigned long lastDebounceTime = 0;
+  static const uint8_t debounceDelay = 10;
 
-  static unsigned long lastDebounceTime = 0;  // the last time the input pin was toggled
-  static const uint8_t debounceDelay = 10;    // debounce time in ms
+  bool greenReading = !digitalRead(greenbutton);
+  bool yellowReading = !digitalRead(yellowbutton);
+  bool redReading = !digitalRead(redbutton);
+  bool blueReading = !digitalRead(bluebutton);
 
-  bool GreenReading = !digitalRead(greenbutton);
-  bool YellowReading = !digitalRead(yellowbutton);
-  bool RedReading = !digitalRead(redbutton);
-  bool BlueReading = !digitalRead(bluebutton);
+  bool stateChanged = (greenReading != lastGreenDeb) || (yellowReading != lastYellowDeb) || 
+                      (redReading != lastRedDeb) || (blueReading != lastBlueDeb);
 
-  if ((GreenReading != lastGreenDeb) || (YellowReading != lastYellowDeb) || (RedReading != lastRedDeb) || (BlueReading != lastBlueDeb)) {
+  if (stateChanged) {
     lastDebounceTime = millis();
-
-    if (!EnableButtons) {  // gain control of internal buttons. without this, in case midi signal is lost during external control, internal buttons may stay disabled
+    if (!EnableButtons) {
       EnableButtons = true;
       numbuttonspressedCC = 0;
     }
   }
 
-  if ((millis() - lastDebounceTime) > debounceDelay) {
-
-    if (EnableButtons) {
-      if (GreenReading != greenstate) {
-        greenstate = GreenReading;
-        ButtonsCommands(greenstate);
-      }
-
-      else if (YellowReading != yellowstate) {
-        yellowstate = YellowReading;
-        ButtonsCommands(yellowstate);
-      }
-
-      else if (RedReading != redstate) {
-        redstate = RedReading;
-        ButtonsCommands(redstate);
-      }
-
-      else if (BlueReading != bluestate) {
-        bluestate = BlueReading;
-        ButtonsCommands(bluestate);
-      }
+  if ((millis() - lastDebounceTime) > debounceDelay && EnableButtons) {
+    if (greenReading != greenstate) {
+      greenstate = greenReading;
+      ButtonsCommands(greenstate);
+    } else if (yellowReading != yellowstate) {
+      yellowstate = yellowReading;
+      ButtonsCommands(yellowstate);
+    } else if (redReading != redstate) {
+      redstate = redReading;
+      ButtonsCommands(redstate);
+    } else if (blueReading != bluestate) {
+      bluestate = blueReading;
+      ButtonsCommands(bluestate);
     }
   }
 
-  lastGreenDeb = GreenReading;
-  lastYellowDeb = YellowReading;
-  lastRedDeb = RedReading;
-  lastBlueDeb = BlueReading;
+  lastGreenDeb = greenReading;
+  lastYellowDeb = yellowReading;
+  lastRedDeb = redReading;
+  lastBlueDeb = blueReading;
 }
 
 void ButtonsCommands(bool anystate) {  // manage the buttons's commands and funcions
