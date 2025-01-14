@@ -2,7 +2,7 @@
  *  @file       Arpmini_plus.ino
  *  Project     Estorm - Arpmini+
  *  @brief      MIDI Sequencer & Arpeggiator
- *  @version    2.02
+ *  @version    2.03
  *  @author     Paolo Estorm
  *  @date       09/12/24
  *  @license    GPL v3.0 
@@ -27,7 +27,7 @@
 #include "Vocabulary.h"
 
 // system
-char version[] = "2.02";
+char version[] = "2.03";
 
 // leds
 #define redled 3     // red led pin
@@ -496,7 +496,7 @@ void RunClock() {  // main clock
     if (menunumber == 0) {
       if (modeselect != 4 && (!recording || (recording && playing))) digitalWrite(yellowled, LOW);  // turn yellowled off before 2 ticks - Tempo indicator
       else if (modeselect == 4) {
-        AllLedsOff();
+        if (playing) AllLedsOff();
       }
     }
   }
@@ -728,6 +728,11 @@ void HandleStop() {  // stop the sequence and switch over to internal clock
 
   if (sendrealtime) MIDI.sendRealTime(midi::Stop);
 
+  if (menunumber == 0) {
+    if (modeselect != 4) digitalWrite(yellowled, LOW);  // turn yellowled off before 2 ticks - Tempo indicator
+    else AllLedsOff();
+  }
+
   playing = false;
   internalClock = true;
   Startposition();
@@ -792,7 +797,7 @@ void Startposition() {  // called every time the sequencing start or stop
 void HandleCC(uint8_t channel, uint8_t cc, uint8_t value) {  // handle midi CC messages
 
   if (channel == midiChannel) {
-    if (cc != 64) {                             // not sustain pedal cc
+    if ((cc != 64) && (cc != 123)) {            // not sustain pedal or all notes off cc
       if (menunumber == 2 && menuitem == 15) {  // if cc mapping mode
         EnableButtons = true;
 
@@ -839,7 +844,7 @@ void HandleCC(uint8_t channel, uint8_t cc, uint8_t value) {  // handle midi CC m
       }
     }
 
-    else {  // sustain pedal cc
+    else if (cc == 64) {  // sustain pedal cc
       sustain = value;
       if (!playing || (playing && trigMode == 0)) MIDI.sendControlChange(cc, value, channel);  // pass through sustain pedal cc
     }
@@ -2336,8 +2341,7 @@ void DebounceButtons() {
   bool redReading = !digitalRead(redbutton);
   bool blueReading = !digitalRead(bluebutton);
 
-  bool stateChanged = (greenReading != lastGreenDeb) || (yellowReading != lastYellowDeb) || 
-                      (redReading != lastRedDeb) || (blueReading != lastBlueDeb);
+  bool stateChanged = (greenReading != lastGreenDeb) || (yellowReading != lastYellowDeb) || (redReading != lastRedDeb) || (blueReading != lastBlueDeb);
 
   if (stateChanged) {
     lastDebounceTime = millis();
