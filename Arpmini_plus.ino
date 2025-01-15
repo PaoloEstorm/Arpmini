@@ -2,7 +2,7 @@
  *  @file       Arpmini_plus.ino
  *  Project     Estorm - Arpmini+
  *  @brief      MIDI Sequencer & Arpeggiator
- *  @version    2.03
+ *  @version    2.04
  *  @author     Paolo Estorm
  *  @date       09/12/24
  *  @license    GPL v3.0 
@@ -27,7 +27,7 @@
 #include "Vocabulary.h"
 
 // system
-char version[] = "2.03";
+char version[] = "2.04";
 
 // leds
 #define redled 3     // red led pin
@@ -44,14 +44,13 @@ bool metro = false;         // metronome toggle
 bool confirmsound = false;  // at button press, play the confirmation sound instead of the click
 
 // screen
-#define USE_MICRO_WIRE
 #define OLED_SPI_SPEED 8000000ul  // set SPI at 8MHz
 #include "GyverOLED.h"
 #define RES 19  // SPI reset pin
 #define DC 20   // SPI DC pin
 #define CS 18   // SPI CS pin
 
-GyverOLED<SSD1306_128x64, OLED_NO_BUFFER, OLED_SPI, CS, DC, RES> oled;  // screen initialization
+GyverOLED<CS, DC, RES> oled;  // screen initialization
 
 bool StartScreenTimer = true;  // activate the screen-on timer
 
