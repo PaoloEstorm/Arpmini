@@ -2,7 +2,7 @@
  *  @file       Arpmini_plus.ino
  *  Project     Estorm - Arpmini+
  *  @brief      MIDI Sequencer & Arpeggiator
- *  @version    2.04
+ *  @version    2.05
  *  @author     Paolo Estorm
  *  @date       09/12/24
  *  @license    GPL v3.0 
@@ -27,7 +27,7 @@
 #include "Vocabulary.h"
 
 // system
-char version[] = "2.04";
+char version[] = "2.05";
 
 // leds
 #define redled 3     // red led pin
@@ -445,7 +445,7 @@ void Bip(uint8_t type) {  // sounds
       if (type == 1) tone(speaker, 3136, 1);        // click
       else if (type == 2) tone(speaker, 2637, 10);  // startup/confirmation
     }
-    if (type == 3) tone(speaker, 3136, 10);      // metronome
+    if (type == 3) tone(speaker, 3136, 5);       // metronome
     else if (type == 4) tone(speaker, 2349, 3);  // metronome
   }
 }
@@ -493,8 +493,9 @@ void RunClock() {  // main clock
 
   if (countTicks == 2) {
     if (menunumber == 0) {
-      if (modeselect != 4 && (!recording || (recording && playing))) digitalWrite(yellowled, LOW);  // turn yellowled off before 2 ticks - Tempo indicator
-      else if (modeselect == 4) {
+      if (modeselect != 4) {
+        if (!recording || (recording && playing)) digitalWrite(yellowled, LOW);  // turn yellowled off before 2 ticks - Tempo indicator
+      } else {
         if (playing) AllLedsOff();
       }
     }
@@ -972,7 +973,7 @@ void SortArray() {  // sort activeNotes array
   }
 }
 
-uint8_t SetScale(int8_t note, uint8_t scale) {  // filter incoming note to fit in to a music scale
+uint8_t SetScale(uint8_t note, uint8_t scale) {  // filter incoming note to fit in to a music scale
 
   static const PROGMEM int8_t scaleOffsets[][12] = {
     { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },             // Scale 0: Linear
@@ -1014,10 +1015,11 @@ uint8_t TransposeAndScale(short int note) {  // apply transposition and scale
 
 void QueueNote(int8_t note) {  // send notes to the midi port
 
-  const uint8_t noteMaxLength = 100;  // this number gets put in the cronLength buffer when the sequencer generates a note
-  bool queued = 0;                    // has current note been queued?
+  static const uint8_t noteMaxLength = 100;  // this number gets put in the cronLength buffer when the sequencer generates a note
+  bool queued = 0;                           // has current note been queued?
   int8_t shortest = noteMaxLength;
   int8_t shortIdx = 0;
+  static const uint8_t defaultVelocity = 64;
 
   if (modeselect == 1) {  // only in arp mode
     if (arpcount > 0) note = note + ((arpcount - 1) * stepdistance);
@@ -1037,7 +1039,7 @@ void QueueNote(int8_t note) {  // send notes to the midi port
 
   for (uint8_t i = 0; (i < queueLength) && (!queued); i++) {  // check avail queue
     if ((cronLength[i] < 0) || (cronNote[i] == note)) {       // free queue slot
-      MIDI.sendNoteOn(note, 64, midiChannel);
+      MIDI.sendNoteOn(note, defaultVelocity, midiChannel);
       if (cronNote[i] >= 0) {  // contains a note that hasn't been collected yet
         MIDI.sendNoteOff(cronNote[i], 0, midiChannel);
       }
@@ -1054,7 +1056,7 @@ void QueueNote(int8_t note) {  // send notes to the midi port
 
   if (!queued) {  // no free queue slots, steal the next expiry
     MIDI.sendNoteOff(cronNote[shortIdx], 0, midiChannel);
-    MIDI.sendNoteOn(note, 64, midiChannel);
+    MIDI.sendNoteOn(note, defaultVelocity, midiChannel);
     cronNote[shortIdx] = note;
     cronLength[shortIdx] = noteMaxLength;
     queued = true;
@@ -1169,14 +1171,24 @@ void SetArpStyle(uint8_t style) {  // 1=up, 2=down, 3=up-down, 4=down-up, 5=up+d
   if (arprepeat < 2) arpcount = 1;
 }
 
+void PrintSmallSpace(uint8_t scale) {
+  oled.setScale(1);
+  oled.print(space);
+  oled.setScale(scale);
+}
+
+void PrintTitle() {  // title's printing setup
+  oled.setScale(2);
+  oled.invertText(1);
+}
+
 void PrintMainScreen() {  // print menu 0 to the screen
 
   menunumber = 0;
 
   oled.clear();
   oled.home();
-  oled.setScale(2);
-  oled.invertText(1);
+  PrintTitle();
 
   if (modeselect == 1) {  // arp mode screen
     oled.setCursorXY(4, 0);
@@ -1241,11 +1253,7 @@ void PrintMainScreen() {  // print menu 0 to the screen
   else if (modeselect == 3) {  // song mode screen
     oled.print(F(" SONG MODE "));
     oled.invertText(0);
-    for (uint8_t i = 0; i < patternLength; i++) {
-      oled.setCursorXY((i * 16) + 2, 16);
-      if (songPattern[i] > 0) oled.print(songPattern[i]);
-      else oled.print(printx);
-    }
+    PrintPatternSequence();
     PrintSongLiveCursor = true;
   }
 
@@ -1285,28 +1293,34 @@ void PrintBPMBar() {  // print BPM status bar to the screen
   else oled.print(ext);
 
   if (modeselect != 4) {
-    oled.setScale(1);
-    oled.print(space);
-    oled.setScale(2);
+    PrintSmallSpace(2);
   } else oled.setCursorXY(46, 32);
 
   oled.print(printbpm);
 
   if (modeselect != 4) {
-    oled.setScale(1);
-    oled.print(space);
-    oled.setScale(2);
+    PrintSmallSpace(2);
   } else oled.setCursorXY(45, 48);
 
   oled.print(tSignature);
   oled.print(fourth);
 }
 
+void PrintPatternSequence() {  // print the sequence to the screen - song mode
+
+  for (uint8_t i = 0; i < patternLength; i++) {
+    if (menunumber == 0) oled.setCursorXY((i * 16) + 2, 16);
+    else oled.setCursorXY(i * 16, 30);
+    if (songPattern[i] > 0) oled.print(songPattern[i]);
+    else oled.print(printx);
+  }
+}
+
 void PrintPatternSequenceCursor() {  // print the cursor to the screen - song mode
 
   oled.setScale(2);
 
-  if (modeselect == 3) {
+  if (modeselect == 3) {  // song mode
 
     oled.clear(0, 34, 127, 40);
     oled.setCursorXY((pattern * 16) + 2, 32);
@@ -1315,7 +1329,7 @@ void PrintPatternSequenceCursor() {  // print the cursor to the screen - song mo
     else oled.print(F("="));
   }
 
-  else if (modeselect == 4) {
+  else if (modeselect == 4) {  // live mode
 
     oled.clear(11, 32, 25, 40);
     oled.clear(100, 32, 114, 40);
@@ -1539,11 +1553,7 @@ void PrintSubmenu(uint8_t item) {  // print menu 2 to the screen
       else if (modeselect == 3) {
         oled.println(edit);
         oled.setScale(2);
-        for (uint8_t i = 0; i < patternLength; i++) {
-          oled.setCursorXY(i * 16, 30);
-          if (songPattern[i] > 0) oled.print(songPattern[i]);
-          else oled.print(printx);
-        }
+        PrintPatternSequence();
         oled.setCursorXY((curpos * 16), 48);
         oled.print(upcursor);
       }
@@ -1560,9 +1570,7 @@ void PrintSubmenu(uint8_t item) {  // print menu 2 to the screen
     case 3:  // tempo
       oled.println(printbpm);
       oled.print(BPM);
-      oled.setScale(1);
-      oled.print(space);
-      oled.setScale(3);
+      PrintSmallSpace(3);
       if (!internalClock) oled.print(F("INT"));
       break;
 
@@ -2090,8 +2098,7 @@ void PrintLoadSaveMenu(uint8_t mode) {  // print menu 3 to the screen
   menunumber = 3;
 
   oled.home();
-  oled.setScale(2);
-  oled.invertText(1);
+  PrintTitle();
 
   if (mode == 0) {  // bake song
     confirmation = true;
@@ -2153,8 +2160,7 @@ void PrintLoadSaveMenu(uint8_t mode) {  // print menu 3 to the screen
 
 void PrintConfirmationPopup() {  // print confirmation popup in load-save menu
 
-  oled.setScale(2);
-  oled.invertText(1);
+  PrintTitle();
   oled.setCursorXY(28, 33);
 
   if (savemode < 2) {  // bake & new
@@ -2188,8 +2194,7 @@ void PrintConfirmationPopup() {  // print confirmation popup in load-save menu
 
 void PrintInterRecordingPopup() {  // seq. select popup
 
-  oled.setScale(2);
-  oled.invertText(1);
+  PrintTitle();
   oled.setCursorXY(28, 33);
   oled.print(space);
   oled.print(seq);
@@ -2326,7 +2331,7 @@ void LoadSave(uint8_t mode, uint8_t number) {  // (bake/new/save/load/delete, sl
   }
 }
 
-void DebounceButtons() {
+void DebounceButtons() {  // debounce buttons
 
   static bool lastGreenDeb = false;
   static bool lastYellowDeb = false;
@@ -2372,7 +2377,7 @@ void DebounceButtons() {
   lastBlueDeb = blueReading;
 }
 
-void ButtonsCommands(bool anystate) {  // manage the buttons's commands and funcions
+void ButtonsCommands(bool anystate) {  // manage the buttons's commands
 
   static bool lockmute = false;  // keep the mute muted. only in arp, seq & song mode
 
