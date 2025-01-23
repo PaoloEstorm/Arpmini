@@ -6,9 +6,6 @@
 #ifndef GyverOLED_h
 #define GyverOLED_h
 
-#define OLED_CLEAR 0
-#define OLED_FILL 1
-
 #include <Arduino.h>
 #include <SPI.h>
 
@@ -22,19 +19,11 @@
 #define OLED_DISPLAY_OFF 0xAE
 #define OLED_DISPLAY_ON 0xAF
 
-#define OLED_COMMAND_MODE 0x00
-#define OLED_ONE_COMMAND_MODE 0x80
-#define OLED_DATA_MODE 0x40
-#define OLED_ONE_DATA_MODE 0xC0
-
 #define OLED_ADDRESSING_MODE 0x20
-#define OLED_HORIZONTAL 0x00
 #define OLED_VERTICAL 0x01
 
 #define OLED_NORMAL_V 0xC8
-#define OLED_FLIP_V 0xC0
 #define OLED_NORMAL_H 0xA1
-#define OLED_FLIP_H 0xA0
 
 #define OLED_CONTRAST 0x81
 #define OLED_SETCOMPINS 0xDA
@@ -46,7 +35,6 @@
 #define OLED_CHARGEPUMP 0x8D
 
 #define OLED_NORMALDISPLAY 0xA6
-#define OLED_INVERTDISPLAY 0xA7
 
 #ifndef OLED_SPI_SPEED
 #define OLED_SPI_SPEED 1000000ul
@@ -91,18 +79,19 @@ public:
     fastWrite(_RST, 1);
 
     beginCommand();
-    for (uint8_t i = 0; i < 15; i++) sendByte(pgm_read_byte(&_oled_init[i]));
+    for (uint8_t i = 0; i < 15; i++) SPI.transfer(pgm_read_byte(&_oled_init[i]));
     endTransm();
     beginCommand();
-    sendByte(OLED_SETCOMPINS);
-    sendByte(OLED_HEIGHT_64);
-    sendByte(OLED_SETMULTIPLEX);
-    sendByte(OLED_64);
+    SPI.transfer(OLED_SETCOMPINS);
+    SPI.transfer(OLED_HEIGHT_64);
+    SPI.transfer(OLED_SETMULTIPLEX);
+    SPI.transfer(OLED_64);
     endTransm();
     setCursorXY(0, 0);
   }
 
   void clear() {
+    
     fill(0);
   }
 
@@ -116,7 +105,7 @@ public:
     beginData();
     for (uint8_t x = x0; x < x1; x++)
       for (uint8_t y = y0; y < y1 + 1; y++)
-        writeData(0);
+        SPI.transfer(0);
     endTransm();
     setCursorXY(_x, _y);
   }
@@ -129,73 +118,56 @@ public:
   virtual size_t write(uint8_t data) {
 
     bool newPos = false;
+
     if (data == '\r') {
       _x = 0;
       newPos = true;
       data = 0;
-    }  // received carriage return
+    }
+
     if (data == '\n') {
       _y += _scaleY;
       newPos = true;
       data = 0;
       _getn = 1;
-    }  // received line feed
-    if (_println && (_x + 6 * _scaleX) >= _maxX) {
-      _x = 0;
-      _y += _scaleY;
-      newPos = true;
-    }                                        // line overflow, move to next line and reset x
-    if (newPos) setCursorXY(_x, _y);         // set cursor position
-    if (_y + _scaleY > _maxY + 1) data = 0;  // display overflow
-    if (_getn && _println && data == ' ' && _x == 0) {
-      _getn = 0;
-      data = 0;
-    }  // remove the first space in the line
-
-    if (data == 0) return 1;
-    // if we haven't exited, print the character
-
-    uint8_t newX = _x + _scaleX * 6;
-    if (newX < 0 || _x > _maxX) _x = newX;  // skip output off-screen
-    else {
-      beginData();
-      for (uint8_t col = 0; col < 6; col++) {   // 6 columns per character
-        uint8_t bits = getFont(data, col);      // get byte
-        if (_invState) bits = ~bits;            // inversion
-        if (_scaleX == 1) {                     // if scale is 1
-          if (_x >= 0 && _x <= _maxX) {         // within display
-            if (_shift == 0) {                  // without line shift
-              writeData(bits);                  // output
-            } else {                            // with shift
-              writeData(bits << _shift);        // upper part
-              writeData(bits >> (8 - _shift));  // lower part
-            }
-          }
-        } else {                 // scale 2, 3 or 4 - stretch font
-          uint32_t newData = 0;  // buffer
-          for (uint8_t i = 0, count = 0; i < 8; i++)
-            for (uint8_t j = 0; j < _scaleX; j++, count++)
-              bitWrite(newData, count, bitRead(bits, i));  // pack stretched font
-
-          for (uint8_t i = 0; i < _scaleX; i++) {  // output horizontally
-            byte prevData = 0;
-            if (_x + i >= 0 && _x + i <= _maxX)                              // within display
-              for (uint8_t j = 0; j < _scaleX; j++) {                        // output vertically
-                byte data = newData >> (j * 8);                              // get buffer piece
-                if (_shift == 0) {                                           // without line shift
-                  writeData(data);                                           // output
-                } else {                                                     // with shift
-                  writeData((prevData >> (8 - _shift)) | (data << _shift));  // merge and output
-                  prevData = data;                                           // remember previous
-                }
-              }
-            if (_shift != 0) writeData(prevData >> (8 - _shift));  // output lower piece with shift
-          }
-        }
-        _x += _scaleX;  // move by pixel width (1-4)
-      }
-      endTransm();
     }
+
+    if (newPos) setCursorXY(_x, _y);  // set cursor position
+
+    if (data == 0) return 1;  // if we haven't exited, print the character
+
+    beginData();
+
+    for (uint8_t col = 0; col < 6; col++) {  // 6 columns per character
+      uint8_t bits = getFont(data, col);     // get byte
+      if (_invState) bits = ~bits;           // inversion
+      if (_scaleX == 1) {                    // if scale is 1
+        SPI.transfer(bits);                  // output
+      } else {                               // scale 2, 3 or 4 - stretch font
+        uint32_t newData = 0;                // buffer
+        for (uint8_t i = 0, count = 0; i < 8; i++)
+          for (uint8_t j = 0; j < _scaleX; j++, count++)
+            bitWrite(newData, count, bitRead(bits, i));  // pack stretched font
+
+        for (uint8_t i = 0; i < _scaleX; i++) {  // output horizontally
+          uint8_t prevData = 0;
+          if (_x + i >= 0 && _x + i <= _maxX)                                 // within display
+            for (uint8_t j = 0; j < _scaleX; j++) {                           // output vertically
+              uint8_t data = newData >> (j * 8);                              // get buffer piece
+              if (_shift == 0) {                                              // without line shift
+                SPI.transfer(data);                                           // output
+              } else {                                                        // with shift
+                SPI.transfer((prevData >> (8 - _shift)) | (data << _shift));  // merge and output
+                prevData = data;                                              // remember previous
+              }
+            }
+          if (_shift != 0) SPI.transfer(prevData >> (8 - _shift));  // output lower piece with shift
+        }
+      }
+      _x += _scaleX;  // move by pixel width (1-4)
+    }
+
+    endTransm();
 
     return 1;
   }
@@ -208,7 +180,7 @@ public:
   void setCursorXY(uint8_t x, uint8_t y) {
     _x = x;
     _y = y;
-    setWindowShift(x, y, _maxX, _scaleY);
+    setWindowShift(x, y);
   }
 
   void setScale(uint8_t scale) {
@@ -227,51 +199,41 @@ public:
 
     setWindow(0, 0, _maxX, _maxRow);
     beginData();
-    for (int i = 0; i < 1024; i++) sendByte(data);
+    for (int i = 0; i < 1024; i++) SPI.transfer(data);
     endTransm();
     setCursorXY(_x, _y);
   }
 
-  void writeData(byte data) {
-
-    sendByte(data);
-  }
-
-  void setWindowShift(uint8_t x0, uint8_t y0, uint8_t sizeX, uint8_t sizeY) {
+  void setWindowShift(uint8_t x0, uint8_t y0) {
 
     _shift = y0 & 0b111;
-    setWindow(x0, (y0 >> 3), x0 + sizeX, (y0 + sizeY - 1) >> 3);
-  }
-
-  void sendByte(uint8_t data) {
-
-    SPI.transfer(data);
+    setWindow(x0, (y0 >> 3), x0 + _maxX, (y0 + _scaleY - 1) >> 3);
   }
 
   void sendCommand(uint8_t cmd1) {
 
     beginCommand();
-    sendByte(cmd1);
+    SPI.transfer(cmd1);
     endTransm();
   }
 
   void sendCommand(uint8_t cmd1, uint8_t cmd2) {
 
     beginCommand();
-    sendByte(cmd1);
-    sendByte(cmd2);
+    SPI.transfer(cmd1);
+    SPI.transfer(cmd2);
     endTransm();
   }
 
   void setWindow(uint8_t x0, uint8_t y0, uint8_t x1, uint8_t y1) {
 
     beginCommand();
-    sendByte(OLED_COLUMNADDR);
-    sendByte(constrain(x0, 0, _maxX));
-    sendByte(constrain(x1, 0, _maxX));
-    sendByte(OLED_PAGEADDR);
-    sendByte(constrain(y0, 0, _maxRow));
-    sendByte(constrain(y1, 0, _maxRow));
+    SPI.transfer(OLED_COLUMNADDR);
+    SPI.transfer(constrain(x0, 0, _maxX));
+    SPI.transfer(constrain(x1, 0, _maxX));
+    SPI.transfer(OLED_PAGEADDR);
+    SPI.transfer(constrain(y0, 0, _maxRow));
+    SPI.transfer(constrain(y1, 0, _maxRow));
     endTransm();
   }
 
