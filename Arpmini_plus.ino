@@ -2,7 +2,7 @@
  *  @file       Arpmini_plus.ino
  *  Project     Estorm - Arpmini+
  *  @brief      MIDI Sequencer & Arpeggiator
- *  @version    2.05
+ *  @version    2.06
  *  @author     Paolo Estorm
  *  @date       09/12/24
  *  @license    GPL v3.0 
@@ -27,7 +27,7 @@
 #include "Vocabulary.h"
 
 // system
-char version[] = "2.05";
+char version[] = "2.06";
 
 // leds
 #define redled 3     // red led pin
@@ -121,6 +121,8 @@ uint8_t BPM = 120;              // beats per minute for internalclock - min 20, 
 bool playing = false;           // is the sequencer playing?
 uint8_t snapmode = 1;           // when play/stop the next sequence in live mode. 0=pattern, 1=up-beat, 2=beat
 bool start = false;             // dirty fix for a ableton live 10 bug. becomes true once at sequence start and send a sync command
+const uint8_t iterations = 8;   // how many BPM "samples" to averege out for the tap tempo. more = more accurate
+uint8_t BPMbuffer[iterations];  // BPM "samples" buffer for tap tempo
 
 // arpeggiator
 const uint8_t holdNotes = 8;    // maximum number of notes that can be held at once
@@ -239,6 +241,10 @@ void setup() {  // initialization setup
   ClearSeqPatternArray();
   Startposition();
   SynthReset();
+
+  for (uint8_t i = 0; i < iterations; i++) {  // initialize the tap tempo array
+    BPMbuffer[i] = BPM;
+  }
 
   Bip(2);  // Startup Sound
   oled.println(F("ARPMINI"));
@@ -414,7 +420,7 @@ void SetSyncPort(uint8_t port) {  // 0-none, 1-port1, 2-port2 define port for ex
   }
 }
 
-unsigned short int eepromaddress(unsigned short int address, uint8_t slot) {  // calculate eeprom addresses // (address, slot number 0-5)
+unsigned int eepromaddress(unsigned int address, uint8_t slot) {  // calculate eeprom addresses (address, slot number 0-5)
 
   return (144 * slot) + address;
 }
@@ -450,21 +456,44 @@ void Bip(uint8_t type) {  // sounds
   }
 }
 
-void SetBPM(uint8_t tempo) {  // change Timer1 speed to match BPM, 20-250
+void SetBPM(uint8_t tempo) {  // change Timer1 speed to match BPM (20-250)
 
-  OCR1A = (25 * (25000 / tempo));  // 2.5*[(16MHz/prescaler)/BPM]
+  OCR1A = ((250000UL * 5) - tempo) / (2 * tempo);
+}
+
+void TapTempo() {  // calculate tempo based on the tapping frequency
+
+  static unsigned long lastTapTime = 0;
+  static uint8_t bufferIndex = 0;
+  unsigned long currentTapTime = millis();
+  unsigned long tapInterval = currentTapTime - lastTapTime;
+
+  if (tapInterval < 1500 && tapInterval > 240) {  // Reset if the time between taps is too long
+
+    BPMbuffer[bufferIndex] = 60250 / tapInterval;
+    bufferIndex = (bufferIndex + 1) % iterations;
+
+    unsigned int BPMsum = 0;
+    for (uint8_t i = 0; i < iterations; i++) {
+      BPMsum += BPMbuffer[i];
+    }
+
+    BPM = BPMsum / iterations;
+    SetBPM(BPM);
+    PrintSubmenu(menuitem);
+  }
+
+  lastTapTime = currentTapTime;
 }
 
 ISR(TIMER1_COMPA_vect) {  // internal clock
-
-  static const uint8_t MaxClockTimeout = 100;
 
   if (internalClock) {
     if ((sendrealtime == 1 && playing) || (sendrealtime == 2)) MIDI.sendRealTime(midi::Clock);
     RunClock();
   } else {
     clockTimeout++;
-    if (clockTimeout > MaxClockTimeout) {
+    if (clockTimeout > 100) {
       HandleStop();
     }
   }
@@ -997,7 +1026,7 @@ uint8_t SetScale(uint8_t note, uint8_t scale) {  // filter incoming note to fit 
   return note + offset;
 }
 
-uint8_t TransposeAndScale(short int note) {  // apply transposition and scale
+uint8_t TransposeAndScale(int note) {  // apply transposition and scale
 
   if ((!pitchmode) || (pitchmode && scale == 0)) note = SetScale(note + pitch, scale);
   else note = SetScale(note - pitch, scale) + pitch;
@@ -1083,7 +1112,7 @@ void ManageRecording() {  // recording setup
   }
 }
 
-void SetArpStyle(uint8_t style) {  // 1=up, 2=down, 3=up-down, 4=down-up, 5=up+down, 6=down+up, 7=random
+void SetArpStyle(uint8_t style) {  // arpeggiator algorithms
 
   if (arpstyle == 2 || arpstyle == 4 || arpstyle == 6) {
     if (countStep == -1) countStep = numActiveNotes;
@@ -1171,7 +1200,7 @@ void SetArpStyle(uint8_t style) {  // 1=up, 2=down, 3=up-down, 4=down-up, 5=up+d
   if (arprepeat < 2) arpcount = 1;
 }
 
-void PrintSmallSpace(uint8_t scale) {
+void PrintSmallSpace(uint8_t scale) {  // print a smaller blank space
   oled.setScale(1);
   oled.print(space);
   oled.setScale(scale);
@@ -2539,6 +2568,8 @@ void ButtonsCommands(bool anystate) {  // manage the buttons's commands
         PrintMainScreen();
         //newgreenstate = false;
       }
+
+      else if (menuitem == 3) TapTempo();
     }
 
     else if (newyellowstate) SubmenuSettings(menuitem, LOW);
