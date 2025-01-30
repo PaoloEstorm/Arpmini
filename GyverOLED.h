@@ -115,7 +115,7 @@ public:
     sendCommand(OLED_CONTRAST, value);
   }
 
-  virtual size_t write(uint8_t data) {  // -4byte
+  virtual size_t write(uint8_t data) {
 
     bool newPos = false;
 
@@ -138,28 +138,26 @@ public:
     for (uint8_t col = 0; col < 6; col++) {  // 6 columns per character
       uint8_t bits = getFont(data, col);     // get byte
       if (_invState) bits = ~bits;           // inversion
-
-      if (_scaleX == 1) {
-        SPI.transfer(bits);  // output if no scaling
-      } else {
-        uint32_t newData = 0;
+      if (_scaleX == 1) {                    // if scale is 1
+        SPI.transfer(bits);                  // output
+      } else {                               // scale 2, 3 or 4 - stretch font
+        uint32_t newData = 0;                // buffer
         for (uint8_t i = 0, count = 0; i < 8; i++)
           for (uint8_t j = 0; j < _scaleX; j++, count++)
-            bitWrite(newData, count, bitRead(bits, i));  // stretch font
+            bitWrite(newData, count, bitRead(bits, i));  // pack stretched font
 
-        uint8_t prevData = 0;
-        for (uint8_t i = 0; i < _scaleX; i++) {
-          if (_x + i >= 0 && _x + i <= _maxX) {
-            for (uint8_t j = 0; j < _scaleX; j++) {
-              uint8_t data = newData >> (j * 8);
-              if (_shift == 0) {
-                SPI.transfer(data);
-              } else {
-                SPI.transfer((prevData >> (8 - _shift)) | (data << _shift));
-                prevData = data;
+        for (uint8_t i = 0; i < _scaleX; i++) {  // output horizontally
+          uint8_t prevData = 0;
+          if (_x + i >= 0 && _x + i <= _maxX)                                 // within display
+            for (uint8_t j = 0; j < _scaleX; j++) {                           // output vertically
+              uint8_t data = newData >> (j * 8);                              // get buffer piece
+              if (_shift == 0) {                                              // without line shift
+                SPI.transfer(data);                                           // output
+              } else {                                                        // with shift
+                SPI.transfer((prevData >> (8 - _shift)) | (data << _shift));  // merge and output
+                prevData = data;                                              // remember previous
               }
             }
-          }
           if (_shift != 0) SPI.transfer(prevData >> (8 - _shift));  // output lower piece with shift
         }
       }
