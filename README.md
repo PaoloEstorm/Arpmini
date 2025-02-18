@@ -59,5 +59,10 @@ Various other functions and settings are available through the menu. (I'm workin
 A simulated demo of Arpmini+ can be explored on Wokwi via the link https://wokwi.com/projects/415695537200967681
 
 Schematic and PCB design: https://oshwlab.com/estorm/miniseq
+Sparkfun Pro Micro: https://amzn.eu/d/if0r67j
+Oled Display (blue): https://amzn.eu/d/c0RTBxJ
+Oled Display (white): https://amzn.eu/d/1IbVAiL
+Buttons: https://amzn.eu/d/09hONIz
+Buzzer: https://amzn.eu/d/fEAc4UO
 
 Note: Arpmini+ uses a modified version of the GyverOLED library by @AlexGyver. Be sure to use the attached files for proper character rendering.
