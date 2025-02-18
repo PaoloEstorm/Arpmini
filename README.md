@@ -59,7 +59,7 @@ Load/save/edit up to 6 songs (4 traks 32 steps max), live/while arpeggiating & s
 
 A simulated demo of Arpmini+ can be explored on Wokwi via the link https://wokwi.com/projects/415695537200967681
 
-## Schematic and PCB design: https://oshwlab.com/estorm/miniseq
+## Schematic and PCB design: https://oshwlab.com/estorm/works
 
 Sparkfun Pro Micro: https://amzn.eu/d/if0r67j
 
