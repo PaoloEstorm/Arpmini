@@ -2,7 +2,7 @@
 
 Arpmini+ is a compact MIDI device, offering advanced functionality as an arpeggiator, sequencer, and note recorder, designed to control external MIDI instruments. By connecting multiple Arpmini+ devices in daisy chain, you can expand its capabilities and control, creating a larger and more versatile system for live performance or music production.
 
-![IMG_6289](https://github.com/user-attachments/assets/f239c43f-1367-4d14-9ad2-6b3daa9d4f9d)
+![IMG_6585](https://github.com/user-attachments/assets/60bd7ffc-d121-4a0a-b854-e3a48006ef9f)
 
 Its features include:
 
@@ -52,17 +52,23 @@ Arpmini+ Modes
     Song Mode: Allows the user to chain up to 8 combinations of 4 recorded patterns, in any desired order.
     Live Mode: Allows the playback of 4 different patterns, each assigned to one of the 4 buttons on Arpmini+. When a button is pressed, the associated pattern is played, and it will change when another button is pressed; otherwise, the pattern loops.
         
-Additional Functions
+## Functions:
 
-Various other functions and settings are available through the menu. (I'm working to write a detailed user manual)
+Load/save/edit up to 6 songs (4 traks 32 steps max), live/while arpeggiating & step by step recording, 7 arp styles - oredered or key-press order, tempo from 20 to 250 BPM with tap-tempo, pre/post and by-root traspositions, 11 music scales, bake (normalize) transpositions and scale,  jitter (range, probability and miss-note probability), up to 4 arp steps with adjustable distance, 4 arpeggiator/sequencer speeds, 3 trigger mode, swing, metronome with customizable time signature, midi channel selection, in/out sync options, external control by MIDI CC, UI sound settings, 
+(I'm working on a detailed user manual)
 
 A simulated demo of Arpmini+ can be explored on Wokwi via the link https://wokwi.com/projects/415695537200967681
 
-Schematic and PCB design: https://oshwlab.com/estorm/miniseq
+## Schematic and PCB design: https://oshwlab.com/estorm/miniseq
+
 Sparkfun Pro Micro: https://amzn.eu/d/if0r67j
+
 Oled Display (blue): https://amzn.eu/d/c0RTBxJ
+
 Oled Display (white): https://amzn.eu/d/1IbVAiL
+
 Buttons: https://amzn.eu/d/09hONIz
+
 Buzzer: https://amzn.eu/d/fEAc4UO
 
 Note: Arpmini+ uses a modified version of the GyverOLED library by @AlexGyver. Be sure to use the attached files for proper character rendering.
