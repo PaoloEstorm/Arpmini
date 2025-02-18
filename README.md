@@ -71,4 +71,6 @@ Buttons: https://amzn.eu/d/09hONIz
 
 Buzzer: https://amzn.eu/d/fEAc4UO
 
+Pin Headers: https://amzn.eu/d/9up7Byu https://amzn.eu/d/d3ZOwLH
+
 Note: Arpmini+ uses a modified version of the GyverOLED library by @AlexGyver. Be sure to use the attached files for proper character rendering.
