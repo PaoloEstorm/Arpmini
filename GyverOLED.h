@@ -68,15 +68,15 @@ public:
 
     SPI.begin();
     pinMode(_CS, OUTPUT);
-    fastWrite(_CS, 1);
+    digitalWrite(_CS, 1);
     pinMode(_DC, OUTPUT);
 
     pinMode(_RST, OUTPUT);
-    fastWrite(_RST, 1);
+    digitalWrite(_RST, 1);
     delay(1);
-    fastWrite(_RST, 0);
+    digitalWrite(_RST, 0);
     delay(20);
-    fastWrite(_RST, 1);
+    digitalWrite(_RST, 1);
 
     beginCommand();
     for (uint8_t i = 0; i < 15; i++) SPI.transfer(pgm_read_byte(&_oled_init[i]));
@@ -113,6 +113,20 @@ public:
   void setContrast(uint8_t value) {
 
     sendCommand(OLED_CONTRAST, value);
+  }
+
+  void printF(const char* ptr) {  // print from flash
+
+    char text;
+    while ((text = pgm_read_byte(ptr++))) {
+      print(text);
+    }
+  }
+
+  void printlnF(const char* ptr) {  // println from flash
+  
+    printF(ptr);
+    println();
   }
 
   virtual size_t write(uint8_t data) {
@@ -236,25 +250,25 @@ public:
   void beginData() {
 
     startTransm();
-    fastWrite(_DC, 1);
+    digitalWrite(_DC, 1);
   }
 
   void beginCommand() {
 
     startTransm();
-    fastWrite(_DC, 0);
+    digitalWrite(_DC, 0);
   }
 
   void endTransm() {
 
-    fastWrite(_CS, 1);
+    digitalWrite(_CS, 1);
     SPI.endTransaction();
   }
 
   void startTransm() {
 
     SPI.beginTransaction(OLED_SPI_SETT);
-    fastWrite(_CS, 0);
+    digitalWrite(_CS, 0);
   }
 
   uint8_t getFont(uint8_t font, uint8_t row) {
@@ -269,11 +283,6 @@ public:
   const uint8_t _maxX = OLED_WIDTH - 1;
 
 private:
-
-  void fastWrite(const uint8_t pin, bool val) {
-
-    digitalWrite(pin, val);
-  }
 
   bool _invState = 0;
   bool _println = false;
