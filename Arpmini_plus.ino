@@ -2,7 +2,7 @@
  *  @file       Arpmini_plus.ino
  *  Project     Estorm - Arpmini+
  *  @brief      MIDI Sequencer & Arpeggiator
- *  @version    2.07
+ *  @version    2.08
  *  @author     Paolo Estorm
  *  @date       09/12/24
  *  @license    GPL v3.0 
@@ -27,7 +27,7 @@
 #include "Vocabulary.h"
 
 // system
-char version[] = "2.07";
+char version[] = "2.08";
 
 // leds
 #define yellowled 2  // yellow led pin
@@ -90,7 +90,7 @@ uint8_t mapButtonSelect = 1;  // 1=red, 2=yellow, 3=blue, 4=green
 // menu
 uint8_t menuitem = 2;              // is the number assiciated with every voice in the main menu. 0 to 16
 uint8_t menunumber = 0;            // 0=mainscreen, 1=menu, 2=submenu, 3=load\save menu
-uint8_t savemode = 0;              // 0=new, 1=save, 2=load, 3=delete
+uint8_t savemode = 0;              // 0=bake, 1=clone, 2=new, 3=save, 4=load, 5=delete
 uint8_t savecurX = 0;              // cursor position in load/save menu 0-5
 bool confirmation = false;         // confirmation popup in load/save menu
 bool full = false;                 // is the selected save slot full?
@@ -107,7 +107,7 @@ uint8_t StepSpeed = 2;          // 1=2x, 2=1x, 3=3/4, 4=1/2
 bool FixSync = false;           // tries to re-allign the sequence when changing step-speeds
 bool flipflopEnable;            // part of the frameperstep flipflop
 uint8_t sendrealtime = 1;       // send midi realtime messages. 0=off, 1=on (@internalclock, only if playing), 2=on (@internalclock, always)
-int8_t GlobalStep;              // keep track of note steps only for metronome and tempo indicator in arp mode
+int8_t GlobalStep;              // keep track of note steps for metronome and tempo indicator
 int8_t tSignature = 4;          // time signature for led indicator/metronome and beats, 1 - 8 (1*/4, 2*/4..to 8/4)
 int8_t GlobalDivison = 4;       // how many steps per beat
 int8_t countBeat;               // keep track of the time beats
@@ -138,13 +138,14 @@ int8_t numActiveNotes = 0;      // number of notes currently stored in the holdN
 uint8_t trigMode = 0;           // 0=hold, 1=trigger, 2=retrigged
 
 // sequencer
-bool recording = false;                         // is the sequencer in the recording state?
-uint8_t rolandLowNote;                          // for 'roland' mode, the sequence is transposed based on the lowest note recorded
-uint8_t rolandTransposeNote;                    // the last note number received for transposing the sequence
-uint8_t seqLength = 16;                         // the number of steps the sequence is looped for - can be less than maxSeqLength
-uint8_t NewSeqLength = 16;                      // 1-32 seq.length of the newly created song
-uint8_t currentSeq = 0;                         // the currently selected sequence row from the big matrix below. 0=seq1, 1=seq2, 2=seq3, 3=seq4
-uint8_t newcurrentSeq = 0;                      // the next sequence is going to play in live mode. 0-3
+bool recording = false;       // is the sequencer in the recording state?
+uint8_t rolandLowNote;        // for 'roland' mode, the sequence is transposed based on the lowest note recorded
+uint8_t rolandTransposeNote;  // the last note number received for transposing the sequence
+uint8_t seqLength = 16;       // the number of steps the sequence is looped for - can be less than maxSeqLength
+uint8_t NewSeqLength = 16;    // 1-32 seq.length of the newly created song
+uint8_t currentSeq = 0;       // the currently selected sequence row from the big matrix below. 0=seq1, 1=seq2, 2=seq3, 3=seq4
+uint8_t newcurrentSeq = 0;    // the next sequence is going to play in live mode. 0-3
+uint8_t currentSeqCopy = 0;
 const uint8_t maxSeqLength = 32;                // the total possible number of steps (columns in the big matrix below)
 const uint8_t numberSequences = 4;              // the number of total sequences
 int8_t noteSeq[numberSequences][maxSeqLength];  // sequences arrays
@@ -454,7 +455,7 @@ void Bip(uint8_t type) {  // sounds
       else if (type == 2) tone(speaker, 2637, 10);  // startup/confirmation
     }
     if (type == 3) tone(speaker, 3136, 5);       // metronome
-    else if (type == 4) tone(speaker, 2349, 3);  // metronome
+    else if (type == 4) tone(speaker, 2349, 5);  // metronome
   }
 }
 
@@ -627,7 +628,7 @@ void HandleStep() {  // step sequencer
     } else countStep = -1;
   }
 
-  else if (modeselect != 1) {  // rec. & song mode
+  else {  // rec. & song mode
 
     countStep = (countStep + 1) % seqLength;  // seq. sequencer
 
@@ -795,7 +796,7 @@ void HandleSongPosition(unsigned int position) {  // send song position midi mes
   if (sendrealtime) MIDI.sendSongPosition(position);
 }
 
-void Startposition() {  // called every time the sequencing start or stop
+void Startposition() {  // called every time the sequencing starts or stops
 
   SetTicksPerStep();
 
@@ -857,7 +858,7 @@ void HandleCC(uint8_t channel, uint8_t cc, uint8_t value) {  // handle midi CC m
       }
 
       else {  // external control
-        bool *state = nullptr;
+        bool* state = nullptr;
 
         if (cc == redbuttonCC) state = &redstate;
         else if (cc == yellowbuttonCC) state = &yellowstate;
@@ -887,7 +888,6 @@ void HandleNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle 
   if (channel == midiChannel) {
 
     if (!playing /*&& !recording*/) {  // bypass if not playing
-                                       // note = TransposeAndScale(note);
       MIDI.sendNoteOn(TransposeAndScale(note), velocity, channel);
     }
 
@@ -909,32 +909,38 @@ void HandleNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle 
       }
     }
 
+    // else if (modeselect != 1) {  // not arp mode
+    //   if (recording) {
+    //     if (playing) {
+    //       if (countTicks + 2 > (ticksPerStep / 2)) {
+    //         noteSeq[currentSeq][(countStep + 1) % seqLength] = note;  // recording & playing
+    //       } else {
+    //         noteSeq[currentSeq][countStep] = note;
+    //         QueueNote(note);
+    //       }
+    //     } else {  // recording & !playing
+    //       HandleStep();
+    //       noteSeq[currentSeq][countStep] = note;
+    //       QueueNote(note);
+    //     }
+    //   } else if (playing) rolandTransposeNote = note;  // in recmode transpose to note only if playing
+    // }
+
     else if (modeselect != 1) {  // not arp mode
       if (recording) {
-        if (playing) {
-          if ((countTicks + 2) > (ticksPerStep / 2)) {
-            noteSeq[currentSeq][(countStep + 1) % seqLength] = note;  // recording & playing
-          } else {
-            noteSeq[currentSeq][countStep] = note;
-            QueueNote(note);
-          }
-        } else {  // recording & !playing
-          HandleStep();
-          noteSeq[currentSeq][countStep] = note;
-          QueueNote(note);
-        }
-      } else if (!recording && playing) rolandTransposeNote = note;  // in recmode transpose to note only if playing
+        if (!playing) HandleStep();
+        noteSeq[currentSeq][countStep] = note;
+        QueueNote(note);
+      } else if (playing) rolandTransposeNote = note;  // in recmode transpose to note only if playing
     }
 
     if (modeselect < 3) {  // not song & live mode
       if (trigMode > 0) {
         muted = false;
-        if ((trigMode == 2) && (numNotesHeld == 1)) {  // trigmode 2 retrig start sequence
+        if (trigMode == 2 && numNotesHeld == 1) {  // trigmode 2 retrig start sequence
           Startposition();
-          if (sendrealtime) {
-            if (internalClock) {
-              MIDI.sendSongPosition(0);
-            }
+          if (internalClock && sendrealtime) {
+            MIDI.sendSongPosition(0);
           }
         }
       }
@@ -949,16 +955,14 @@ void HandleNoteOff(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle
 
   if (channel == midiChannel) {
 
+    numNotesHeld--;
+    if (numNotesHeld < 0) numNotesHeld = 0;
+
     if (!playing /* && !recording*/) {  // pass trough note off messages
-                                        // note = TransposeAndScale(note);
       MIDI.sendNoteOff(TransposeAndScale(note), velocity, channel);
     }
 
-    numNotesHeld--;
-
-    if (numNotesHeld < 0) numNotesHeld = 0;
-
-    if (modeselect == 1 && trigMode > 0 && !sustain) {  // arp mode
+    else if (modeselect == 1 && trigMode > 0 && !sustain) {  // arp mode
       if (numNotesHeld == 0) muted = true;
       for (uint8_t i = 0; i < holdNotes; i++) {
         if (activeNotes[i] == note) {
@@ -1228,7 +1232,7 @@ void SetArpStyle(uint8_t style) {  // arpeggiator algorithms
 
 void PrintSmallSpace(uint8_t scale) {  // print a smaller blank space
   oled.setScale(1);
-  oled.print(space);
+  oled.printF(space);
   oled.setScale(scale);
 }
 
@@ -1278,35 +1282,35 @@ void PrintMainScreen() {  // print menu 0 to the screen
     switch (arpstyle) {
       case 1:
         oled.setCursorXY(48, 19);
-        oled.print(printup);
+        oled.printF(printup);
         break;
       case 2:
         oled.setCursorXY(28, 19);
-        oled.print(printdown);
+        oled.printF(printdown);
         break;
       case 3:
-        oled.print(printup);
-        oled.print(minus);
-        oled.print(printdown);
+        oled.printF(printup);
+        oled.printF(minus);
+        oled.printF(printdown);
         break;
       case 4:
-        oled.print(printdown);
-        oled.print(minus);
-        oled.print(printup);
+        oled.printF(printdown);
+        oled.printF(minus);
+        oled.printF(printup);
         break;
       case 5:
-        oled.print(printup);
-        oled.print(plus);
-        oled.print(printdown);
+        oled.printF(printup);
+        oled.printF(plus);
+        oled.printF(printdown);
         break;
       case 6:
-        oled.print(printdown);
-        oled.print(plus);
-        oled.print(printup);
+        oled.printF(printdown);
+        oled.printF(plus);
+        oled.printF(printup);
         break;
       case 7:
         oled.setCursorXY(10, 19);
-        oled.print(printrandom);
+        oled.printF(printrandom);
         break;
     }
     oled.setScale(2);
@@ -1317,12 +1321,12 @@ void PrintMainScreen() {  // print menu 0 to the screen
     oled.print(F(" REC MODE "));
     oled.invertText(0);
     oled.setCursorXY(36, 16);
-    oled.print(seq);
+    oled.printF(seq);
     oled.print(currentSeq + 1);
 
     if (seqLength > 9) oled.setCursorXY(13, 32);
     else oled.setCursorXY(18, 32);
-    oled.print(length);
+    oled.printF(length);
     if (seqLength > 9) oled.setCursorXY(90, 32);
     else oled.setCursorXY(95, 32);
     oled.print(seqLength);
@@ -1368,20 +1372,20 @@ void PrintBPMBar() {  // print BPM status bar to the screen
   }
 
   if (internalClock) oled.print(BPM);
-  else oled.print(ext);
+  else oled.printF(ext);
 
   if (modeselect != 4) {
     PrintSmallSpace(2);
   } else oled.setCursorXY(46, 32);
 
-  oled.print(printbpm);
+  oled.printF(printbpm);
 
   if (modeselect != 4) {
     PrintSmallSpace(2);
   } else oled.setCursorXY(45, 48);
 
   oled.print(tSignature);
-  oled.print(fourth);
+  oled.printF(fourth);
 }
 
 void PrintPatternSequence() {  // print the sequence to the screen - song mode
@@ -1390,7 +1394,7 @@ void PrintPatternSequence() {  // print the sequence to the screen - song mode
     if (menunumber == 0) oled.setCursorXY((i * 16) + 2, 16);
     else oled.setCursorXY(i * 16, 30);
     if (songPattern[i] > 0) oled.print(songPattern[i]);
-    else oled.print(printx);
+    else oled.printF(printx);
   }
 }
 
@@ -1403,7 +1407,7 @@ void PrintPatternSequenceCursor() {  // print the cursor to the screen - song mo
     oled.clear(0, 34, 127, 40);
     oled.setCursorXY((pattern * 16) + 2, 32);
 
-    if (!lockpattern) oled.print(upcursor);
+    if (!lockpattern) oled.printF(upcursor);
     else oled.print(F("="));
   }
 
@@ -1415,8 +1419,8 @@ void PrintPatternSequenceCursor() {  // print the cursor to the screen - song mo
     if (currentSeq < 2) oled.setCursorXY(13, 32);
     else oled.setCursorXY(102, 32);
 
-    if (currentSeq == 0 || currentSeq == 2) oled.print(upcursor);
-    else oled.print(downcursor);
+    if (currentSeq == 0 || currentSeq == 2) oled.printF(upcursor);
+    else oled.printF(downcursor);
   }
 }
 
@@ -1426,39 +1430,39 @@ void PrintMenu(uint8_t item) {  // print menu 1 to the screen
 
   ClearScreen();
   oled.setScale(3);
-  oled.print(printnext);
+  oled.printF(printnext);
 
   switch (item) {
 
     case 0:  // load-save
-      oled.print(file);
+      oled.printF(file);
       break;
 
     case 1:  // mode select
-      oled.println(printmode);
-      oled.print(select);
+      oled.printlnF(printmode);
+      oled.printF(select);
       break;
 
     case 2:  // seq.select
       if (modeselect == 1) {
-        oled.println(arp);
-        oled.print(printstyle);
+        oled.printlnF(arp);
+        oled.printF(printstyle);
       }
 
       else if (modeselect == 2) {
-        oled.println(seq);
-        oled.print(select);
+        oled.printlnF(seq);
+        oled.printF(select);
       }
 
       else if (modeselect == 3) {
-        oled.println(edit);
-        oled.print(song);
+        oled.printlnF(edit);
+        oled.printF(song);
       }
 
       else if (modeselect == 4) {
         if (playing) oled.println(F("STOP"));
         else oled.println(F("START"));
-        oled.print(printlive);
+        oled.printF(printlive);
       }
       break;
 
@@ -1467,57 +1471,57 @@ void PrintMenu(uint8_t item) {  // print menu 1 to the screen
       break;
 
     case 4:  // pitch
-      oled.println(printpitch);
+      oled.printlnF(printpitch);
       break;
 
     case 5:  // scale
-      oled.println(printscale);
+      oled.printlnF(printscale);
       break;
 
     case 6:  // jitter
-      oled.println(F("JITT"));
+      oled.println(F("JITTER"));
       break;
 
     case 7:  // note lenght
-      oled.println(printnote);
-      oled.print(length);
+      oled.printlnF(printnote);
+      oled.printF(length);
       break;
 
     case 8:  // seq.length / arp steps
       if (modeselect != 1) {
-        oled.println(seq);
-        oled.print(length);
+        oled.printlnF(seq);
+        oled.printF(length);
       } else {
-        oled.println(arp);
-        oled.print(steps);
+        oled.printlnF(arp);
+        oled.printF(steps);
       }
       break;
 
     case 9:  // arp/seq. speed
-      if (modeselect != 1) oled.println(seq);
-      else oled.println(arp);
-      oled.print(speed);
+      if (modeselect != 1) oled.printlnF(seq);
+      else oled.printlnF(arp);
+      oled.printF(speed);
       break;
 
     case 10:  // trig.mode / chain rec / snap mode
       if (modeselect < 3) {
         oled.println(F("TRIG"));
-        oled.print(printmode);
+        oled.printF(printmode);
       } else if (modeselect == 3) {
-        oled.println(chain);
-        oled.print(rec);
+        oled.printlnF(chain);
+        oled.printF(rec);
       } else if (modeselect == 4) {
         oled.println(F("SNAP"));
-        oled.print(printmode);
+        oled.printF(printmode);
       }
       break;
 
     case 11:  // swing
-      oled.print(printswing);
+      oled.printF(printswing);
       break;
 
     case 12:  // metro
-      oled.print(printmetro);
+      oled.printF(printmetro);
       break;
 
     case 13:  // midi channel
@@ -1527,21 +1531,21 @@ void PrintMenu(uint8_t item) {  // print menu 1 to the screen
 
     case 14:  // midi realtime messages
       oled.println(F("SEND"));
-      oled.print(sync);
+      oled.printF(sync);
       break;
 
     case 15:  // sync port
-      oled.println(ext);
-      oled.print(sync);
+      oled.printlnF(ext);
+      oled.printF(sync);
       break;
 
     case 16:  // map buttons
-      oled.println(printmap);
+      oled.printlnF(printmap);
       oled.print(F("KEYS"));
       break;
 
     case 17:  // sound
-      oled.print(printsound);
+      oled.printF(printsound);
       break;
 
     case 18:  // restart
@@ -1557,63 +1561,64 @@ void PrintSubmenu(uint8_t item) {  // print menu 2 to the screen
   ClearScreen();
   oled.setScale(3);
 
-  if (item == 0) oled.print(printnext);
-  else if (item != 6 && item != 18) oled.print(printback);
+  if (item == 0) oled.printF(printnext);
+  else if (item != 6 && item != 18) oled.printF(printback);
 
   switch (item) {
 
     case 0:  // load-save
-      if (modeselect == 1 && savemode == 0) savemode = 1;
-      if (savemode == 0) oled.println(printbake);
-      else if (savemode == 1) oled.println(printnew);
-      else if (savemode == 2) oled.println(printsave);
-      else if (savemode == 3) oled.println(printload);
-      else if (savemode == 4) oled.println(printdelete);
-      if (savemode == 0 && ((modeselect == 2) || (modeselect == 3 && lockpattern))) oled.print(seq);
-      else oled.print(song);
+      if (modeselect == 1 && savemode < 2) savemode = 2;
+      if (savemode == 0) oled.println(F("BAKE"));
+      else if (savemode == 1) oled.println(F("CLONE"));
+      else if (savemode == 2) oled.println(F("NEW"));
+      else if (savemode == 3) oled.println(F("SAVE"));
+      else if (savemode == 4) oled.println(F("LOAD"));
+      else if (savemode == 5) oled.println(F("DELETE"));
+      if ((savemode == 0 && modeselect == 2) || (modeselect == 3 && lockpattern) || (savemode == 1)) oled.printF(seq);
+      else oled.printF(song);
       break;
 
     case 1:  // mode select
-      oled.println(printmode);
-      if (premodeselect == 1) oled.print(arp);
-      else if (premodeselect == 2) oled.print(rec);
-      else if (premodeselect == 3) oled.print(song);
-      else if (premodeselect == 4) oled.print(printlive);
+      oled.printlnF(printmode);
+      if (premodeselect == 1) oled.printF(arp);
+      else if (premodeselect == 2) oled.printF(rec);
+      else if (premodeselect == 3) oled.printF(song);
+      else if (premodeselect == 4) oled.printF(printlive);
       break;
 
     case 2:  // arp style/seq.select/edit song/start-stop live
       if (modeselect == 1) {
-        oled.println(printstyle);
+        oled.printlnF(printstyle);
 
         switch (arpstyle) {
           case 1:
-            oled.print(printup);
+            oled.printF(printup);
             break;
           case 2:
-            oled.print(printdown);
+            oled.printF(printdown);
             break;
           case 3:
-            oled.print(printup);
-            oled.print(minus);
-            oled.print(printdown);
+            oled.printF(printup);
+            oled.printF(minus);
+            oled.printF(printdown);
             break;
           case 4:
-            oled.print(printdown);
-            oled.print(minus);
-            oled.print(printup);
+            oled.printF(printdown);
+            oled.printF(minus);
+            oled.printF(printup);
             break;
           case 5:
-            oled.print(printup);
-            oled.print(plus);
-            oled.print(printdown);
+            oled.printF(printup);
+            oled.printF(plus);
+            oled.printF(printdown);
             break;
           case 6:
-            oled.print(printdown);
-            oled.print(plus);
-            oled.print(printup);
+            oled.printF(printdown);
+            oled.printF(plus);
+            oled.printF(printup);
             break;
           case 7:
-            oled.print(printrandom);
+            oled.printF(printrandom);
             break;
         }
 
@@ -1625,16 +1630,16 @@ void PrintSubmenu(uint8_t item) {  // print menu 2 to the screen
       }
 
       else if (modeselect == 2) {
-        oled.println(seq);
+        oled.printlnF(seq);
         oled.print(currentSeq + 1);
       }
 
       else if (modeselect == 3) {
-        oled.println(edit);
+        oled.printlnF(edit);
         oled.setScale(2);
         PrintPatternSequence();
         oled.setCursorXY((curpos * 16), 48);
-        oled.print(upcursor);
+        oled.printF(upcursor);
       }
 
       else if (modeselect == 4) {
@@ -1647,114 +1652,39 @@ void PrintSubmenu(uint8_t item) {  // print menu 2 to the screen
       break;
 
     case 3:  // tempo
-      oled.println(printbpm);
+      oled.printlnF(printbpm);
       oled.print(BPM);
       PrintSmallSpace(3);
       if (!internalClock) oled.print(F("INT"));
       break;
 
     case 4:  // pitch
-      oled.println(printpitch);
-      if (pitch > 0) oled.print(plus);
+      oled.printlnF(printpitch);
+      if (pitch > 0) oled.printF(plus);
       oled.print(pitch);
 
       if (pitchmode) {
-        oled.print(space);
-
+        oled.printF(space);
         uint8_t normalizedTranspose = (pitch % 12 + 12) % 12;  // normalize the transpose value
-
-        switch (normalizedTranspose) {
-          case 0:
-            oled.print(F("C"));
-            break;
-          case 1:
-            oled.print(F("C#"));
-            break;
-          case 2:
-            oled.print(F("D"));
-            break;
-          case 3:
-            oled.print(F("D#"));
-            break;
-          case 4:
-            oled.print(F("E"));
-            break;
-          case 5:
-            oled.print(F("F"));
-            break;
-          case 6:
-            oled.print(F("F#"));
-            break;
-          case 7:
-            oled.print(F("G"));
-            break;
-          case 8:
-            oled.print(F("G#"));
-            break;
-          case 9:
-            oled.print(F("A"));
-            break;
-          case 10:
-            oled.print(F("A#"));
-            break;
-          case 11:
-            oled.print(F("B"));
-            break;
-        }
+        oled.printF(noteNames[normalizedTranspose]);
       }
+
       PrintBottomText();
       if (!pitchmode) {
         oled.print(F("PRE-"));
-        oled.print(printscale);
+        oled.printF(printscale);
       } else {
-        oled.print(printscale);
+        oled.printF(printscale);
         oled.print(F("-ROOT"));
       }
       break;
 
     case 5:  // scale
-      oled.println(printscale);
-      switch (scale) {
-        case 0:
-          oled.print(F("LINEAR"));
-          break;
-        case 1:
-          oled.print(F("PENTMAJ"));
-          break;
-        case 2:
-          oled.print(F("PENTMIN"));
-          break;
-        case 3:
-          oled.print(F("MAJOR"));
-          break;
-        case 4:
-          oled.print(F("MINOR"));
-          break;
-        case 5:
-          oled.print(F("ARABIC"));
-          break;
-        case 6:
-          oled.print(F("BLUES"));
-          break;
-        case 7:
-          oled.print(F("LOCRIAN"));
-          break;
-        case 8:
-          oled.print(F("LYDIAN"));
-          break;
-        case 9:
-          oled.print(F("DORIAN"));
-          break;
-        case 10:
-          oled.print(F("INVERSE"));
-          break;
-        case 11:
-          oled.print(F("HEXATON"));
-          break;
-      }
+      oled.printlnF(printscale);
+      oled.printF(scaleNames[scale]);
       PrintBottomText();
       oled.print(F("TRANSP."));
-      if (posttranspose > 0) oled.print(plus);
+      if (posttranspose > 0) oled.printF(plus);
       oled.print(posttranspose);
       break;
 
@@ -1766,65 +1696,55 @@ void PrintSubmenu(uint8_t item) {  // print menu 2 to the screen
       oled.println(jitrange);
       oled.print(F(" PROB "));
       oled.print(jitprob * 10);
-      oled.println(percent);
+      oled.printlnF(percent);
       oled.print(F(" MISS "));
       oled.print(jitmiss * 10);
-      oled.print(percent);
+      oled.printF(percent);
       oled.setCursorXY(0, Jittercur * 16);
-      oled.print(printnext);
+      oled.printF(printnext);
       break;
 
     case 7:  // note lenght
-      oled.println(length);
-      if (noteLengthSelect == 0) {
-        oled.print(printrandom);
-      } else if (noteLengthSelect == 1) {
-        oled.print(10);
-      } else if (noteLengthSelect == 2) {
-        oled.print(30);
-      } else if (noteLengthSelect == 3) {
-        oled.print(50);
-      } else if (noteLengthSelect == 4) {
-        oled.print(70);
-      } else if (noteLengthSelect == 5) {
-        oled.print(100);
-      } else if (noteLengthSelect == 6) {
-        oled.print(120);
+      oled.printlnF(length);
+      if (noteLengthSelect == 0)
+        oled.printF(printrandom);
+      else {
+        oled.print(noteLengthSelect * 20);
+        oled.printF(percent);
       }
-      if (noteLengthSelect > 0) oled.print(percent);
       break;
 
     case 8:  // seq.length / arp steps
       if (modeselect != 1) {
-        oled.println(length);
+        oled.printlnF(length);
         oled.print(seqLength);
       } else {
-        oled.println(steps);
-        if (arprepeat > 1) oled.print(plus);
+        oled.printlnF(steps);
+        if (arprepeat > 1) oled.printF(plus);
         oled.print(arprepeat - 1);
         PrintBottomText();
         oled.print(F("DIST."));
-        if (stepdistance > 0) oled.print(plus);
+        if (stepdistance > 0) oled.printF(plus);
         oled.print(stepdistance);
       }
       break;
 
     case 9:  // arp/seq. speed
-      oled.println(speed);
+      oled.printlnF(speed);
       if (StepSpeed == 4) {
-        oled.print(half);
+        oled.printF(half);
       } else if (StepSpeed == 3) {
-        oled.print(third);
+        oled.printF(third);
       } else if (StepSpeed == 2) {
-        oled.print(normal);
+        oled.printF(normal);
       } else if (StepSpeed == 1) {
-        oled.print(twice);
+        oled.printF(twice);
       }
       break;
 
     case 10:  // trig.mode / chain rec / snap mode
       if (modeselect < 3) {
-        oled.println(printmode);
+        oled.printlnF(printmode);
         if (trigMode == 0) oled.print(F("HOLD"));
         else if (trigMode == 1) {
           oled.print(F("GATE"));
@@ -1833,13 +1753,13 @@ void PrintSubmenu(uint8_t item) {  // print menu 2 to the screen
       }
 
       else if (modeselect == 3) {
-        oled.println(chain);
-        if (chainrec) oled.print(on);
-        else oled.print(off);
+        oled.printlnF(chain);
+        if (chainrec) oled.printF(on);
+        else oled.printF(off);
       }
 
       else if (modeselect == 4) {
-        oled.println(printmode);
+        oled.printlnF(printmode);
         if (snapmode == 0) oled.print(F("PATTERN"));
         if (snapmode == 1) oled.print(F("UP-"));
         if (snapmode > 0) oled.print(F("BEAT"));
@@ -1847,19 +1767,19 @@ void PrintSubmenu(uint8_t item) {  // print menu 2 to the screen
       break;
 
     case 11:  // swing
-      oled.println(printswing);
-      if (!swing) oled.print(off);
-      else if (swing) oled.print(on);
+      oled.printlnF(printswing);
+      if (!swing) oled.printF(off);
+      else if (swing) oled.printF(on);
       break;
 
     case 12:  // metro
-      oled.println(printmetro);
-      if (!metro) oled.print(off);
-      else if (metro) oled.print(on);
+      oled.printlnF(printmetro);
+      if (!metro) oled.printF(off);
+      else if (metro) oled.printF(on);
       PrintBottomText();
       oled.print(F("SIGN."));
       oled.print(tSignature);
-      oled.print(fourth);
+      oled.printF(fourth);
       break;
 
     case 13:  // midi channel
@@ -1868,21 +1788,21 @@ void PrintSubmenu(uint8_t item) {  // print menu 2 to the screen
       break;
 
     case 14:  // midi realtime messages
-      oled.println(sync);
-      if (!sendrealtime) oled.print(off);
-      else if (sendrealtime == 1) oled.print(on);
+      oled.printlnF(sync);
+      if (!sendrealtime) oled.printF(off);
+      else if (sendrealtime == 1) oled.printF(on);
       else if (sendrealtime == 2) oled.print(F("ALWAYS"));
       break;
 
     case 15:  // sync port
       oled.println(F("PORT"));
-      if (syncport == 0) oled.print(off);
+      if (syncport == 0) oled.printF(off);
       else if (syncport > 0) oled.print(syncport);
       break;
 
     case 16:  // map buttons
-      oled.println(printmap);
-      oled.print(printCC);
+      oled.printlnF(printmap);
+      oled.printF(printCC);
       AllLedsOff();
       if (mapButtonSelect == 1) {
         oled.print(redbuttonCC);
@@ -1900,10 +1820,10 @@ void PrintSubmenu(uint8_t item) {  // print menu 2 to the screen
       break;
 
     case 17:  // sound
-      oled.println(printsound);
-      if (soundmode == 1) oled.print(on);
+      oled.printlnF(printsound);
+      if (soundmode == 1) oled.printF(on);
       else if (soundmode == 2) oled.print(F("UI-"));
-      if (soundmode != 1) oled.print(off);
+      if (soundmode != 1) oled.printF(off);
       break;
 
     case 18:  // restart
@@ -1918,7 +1838,7 @@ void SubmenuSettings(uint8_t item, bool dir) {  // handles changing settings in 
 
     case 0:  // load-save
       if (dir == LOW) {
-        if (savemode < 4) savemode++;
+        if (savemode < 5) savemode++;
       } else {
         if (savemode > 0) savemode--;
       }
@@ -2224,14 +2144,29 @@ void PrintLoadSaveMenu(uint8_t mode) {  // print menu 3 to the screen
     PrintConfirmationPopup();
   }
 
-  else if (mode == 1) {  // new song
+  else if (mode == 1) {  // clone seq.
+    oled.clear(0, 32, 127, 48);
+    oled.print(F(" CLONE SEQ "));
+    oled.invertText(0);
+    oled.setCursorXY(35, 16);
+    oled.printF(seq);
+    oled.print(currentSeq + 1);
+    oled.setCursorXY(58, 32);
+    oled.print(F("$"));
+    oled.setCursorXY(23, 48);
+    oled.printF(printnext);
+    oled.printF(seq);
+    oled.print(currentSeqCopy + 1);
+  }
+
+  else if (mode == 2) {  // new song
     oled.clear(0, 32, 127, 48);
     oled.setCursorXY(5, 0);
     oled.print(F(" NEW SONG "));
     oled.invertText(0);
     oled.setCursorXY(5, 16);
-    oled.print(seq);
-    oled.print(length);
+    oled.printF(seq);
+    oled.printF(length);
     oled.setScale(3);
     if (NewSeqLength > 9) oled.setCursorXY(45, 32);
     else oled.setCursorXY(56, 32);
@@ -2242,15 +2177,15 @@ void PrintLoadSaveMenu(uint8_t mode) {  // print menu 3 to the screen
     oled.clear(48, 20, 64, 64);
     oled.clear(112, 20, 127, 127);
 
-    if (mode == 2) {
+    if (mode == 3) {
       oled.print(F(" SAVE SONG "));
     }
 
-    else if (mode == 3) {
+    else if (mode == 4) {
       oled.print(F(" LOAD SONG "));
     }
 
-    else if (mode == 4) {
+    else if (mode == 5) {
       oled.print(F("  DELETE   "));
     }
 
@@ -2273,76 +2208,11 @@ void PrintLoadSaveMenu(uint8_t mode) {  // print menu 3 to the screen
       oled.setCursorXY(115, (savecurX - 2) * 16);
     }
 
-    oled.print(printback);
+    oled.printF(printback);
   }
 }
 
-void PrintConfirmationPopup() {  // print confirmation popup in load-save menu
-
-  PrintTitle();
-  oled.setCursorXY(28, 33);
-
-  if (savemode < 2) {  // bake & new
-    oled.setCursorXY(8, 33);
-    oled.print(F(" PROCEED?"));
-  }
-
-  else if (savemode == 2) {  // save
-    if (!full) oled.print(F(" SAVE?"));
-    else {
-      oled.setCursorXY(4, 33);
-      oled.print(F(" OVERRIDE?"));
-    }
-  }
-
-  else if (savemode > 2) {  // load
-    if (!full) {
-      oled.setCursorXY(22, 33);
-      oled.print(F(" EMPTY!"));
-    } else {
-      if (savemode == 3) oled.print(F(" LOAD?"));
-      else if (savemode == 4) {  // delete
-        oled.setCursorXY(16, 33);
-        oled.print(F(" DELETE?"));
-      }
-    }
-  }
-
-  oled.invertText(0);
-}
-
-void PrintInterRecordingPopup() {  // seq. select popup
-
-  PrintTitle();
-  oled.setCursorXY(28, 33);
-  oled.print(space);
-  oled.print(seq);
-  oled.print(newcurrentSeq + 1);
-  oled.invertText(0);
-}
-
-void BakeSequence() {  // bake transpose & scale in to current seq / all seqs
-
-  if ((modeselect == 2) || (modeselect == 3 && lockpattern)) {  // bake current Seq array
-    for (uint8_t i = 0; i < maxSeqLength; i++) {
-      if (noteSeq[currentSeq][i] > 0) noteSeq[currentSeq][i] = TransposeAndScale(noteSeq[currentSeq][i]);
-    }
-  }
-
-  else {
-    for (uint8_t j = 0; j < numberSequences; j++) {  // bake all Seq arrays
-      for (uint8_t i = 0; i < maxSeqLength; i++) {
-        if (noteSeq[j][i] > 0) noteSeq[j][i] = TransposeAndScale(noteSeq[j][i]);
-      }
-    }
-  }
-
-  scale = 0;
-  pitch = 0;
-  posttranspose = 0;
-}
-
-void LoadSave(uint8_t mode, uint8_t number) {  // (bake/new/save/load/delete, slot number 0-5)
+void LoadSave(uint8_t mode, uint8_t number) {  // (bake/clone/new/save/load/delete, slot number 0-5)
 
   if (mode == 0) {  // bake song
     BakeSequence();
@@ -2350,7 +2220,15 @@ void LoadSave(uint8_t mode, uint8_t number) {  // (bake/new/save/load/delete, sl
     PrintMainScreen();
   }
 
-  else if (mode == 1) {  // new song
+  else if (mode == 1) {  // clone seq.
+    if (currentSeq != currentSeqCopy) {
+      CloneSequence(currentSeq, currentSeqCopy);
+    }
+    ScreenBlink();
+    PrintMainScreen();
+  }
+
+  else if (mode == 2) {  // new song
     playing = false;
     StepSpeed = 2;
     swing = false;
@@ -2370,9 +2248,9 @@ void LoadSave(uint8_t mode, uint8_t number) {  // (bake/new/save/load/delete, sl
     PrintMainScreen();
   }
 
-  else if (mode > 1) {
+  else if (mode > 2) {
 
-    if (mode == 2) {  // save song
+    if (mode == 3) {  // save song
       EEPROM.update((eepromaddress(16, number)), 1);
       EEPROM.update((eepromaddress(17, number)), pitchmode);
       EEPROM.update((eepromaddress(18, number)), pitch);
@@ -2394,7 +2272,7 @@ void LoadSave(uint8_t mode, uint8_t number) {  // (bake/new/save/load/delete, sl
       oled.clear();
     }
 
-    else if (mode == 3) {  // load song
+    else if (mode == 4) {  // load song
       if (full) {
         playing = false;
         lockpattern = false;
@@ -2424,7 +2302,7 @@ void LoadSave(uint8_t mode, uint8_t number) {  // (bake/new/save/load/delete, sl
       } else confirmation = false;
     }
 
-    else if (mode == 4) {  // delete song
+    else if (mode == 5) {  // delete song
       if (full) {
         EEPROM.update((eepromaddress(16, number)), 0);
         ScreenBlink();
@@ -2434,6 +2312,78 @@ void LoadSave(uint8_t mode, uint8_t number) {  // (bake/new/save/load/delete, sl
 
     PrintLoadSaveMenu(savemode);
   }
+}
+
+void BakeSequence() {  // bake transpose & scale in to current seq / all seqs
+
+  if ((modeselect == 2) || (modeselect == 3 && lockpattern)) {  // bake current Seq array
+    for (uint8_t i = 0; i < maxSeqLength; i++) {
+      if (noteSeq[currentSeq][i] > 0) noteSeq[currentSeq][i] = TransposeAndScale(noteSeq[currentSeq][i]);
+    }
+  }
+
+  else {
+    for (uint8_t j = 0; j < numberSequences; j++) {  // bake all Seq arrays
+      for (uint8_t i = 0; i < maxSeqLength; i++) {
+        if (noteSeq[j][i] > 0) noteSeq[j][i] = TransposeAndScale(noteSeq[j][i]);
+      }
+    }
+  }
+
+  scale = 0;
+  pitch = 0;
+  posttranspose = 0;
+}
+
+void CloneSequence(uint8_t source, uint8_t destination) {
+
+  for (uint8_t i = 0; i < maxSeqLength; i++) {
+    noteSeq[destination][i] = noteSeq[source][i];
+  }
+}
+
+void PrintConfirmationPopup() {  // print confirmation popup in load-save menu
+
+  PrintTitle();
+  oled.setCursorXY(28, 33);
+
+  if (savemode < 3) {  // bake & new
+    oled.setCursorXY(10, 33);
+    oled.print(F(" PROCEED?"));
+  }
+
+  else if (savemode == 3) {  // save
+    if (!full) oled.print(F(" SAVE?"));
+    else {
+      oled.setCursorXY(4, 33);
+      oled.print(F(" OVERRIDE?"));
+    }
+  }
+
+  else if (savemode > 3) {  // load
+    if (!full) {
+      oled.setCursorXY(22, 33);
+      oled.print(F(" EMPTY!"));
+    } else {
+      if (savemode == 4) oled.print(F(" LOAD?"));
+      else if (savemode == 5) {  // delete
+        oled.setCursorXY(16, 33);
+        oled.print(F(" DELETE?"));
+      }
+    }
+  }
+
+  oled.invertText(0);
+}
+
+void PrintInterRecordingPopup() {  // seq. select popup
+
+  PrintTitle();
+  oled.setCursorXY(28, 33);
+  oled.printF(space);
+  oled.printF(seq);
+  oled.print(newcurrentSeq + 1);
+  oled.invertText(0);
 }
 
 void DebounceButtons() {  // debounce buttons
@@ -2637,7 +2587,7 @@ void ButtonsCommands(bool anystate) {  // manage the buttons's commands
         newgreenstate = false;
       }
 
-      if (menuitem == 1) {
+      else if (menuitem == 1) {
         newcurrentSeq = currentSeq;
         modeselect = premodeselect;
         ScreenBlink();
@@ -2656,48 +2606,51 @@ void ButtonsCommands(bool anystate) {  // manage the buttons's commands
 
     if (!confirmation) {
 
-      if (savemode == 0) {  // bake song
-        // nothing to do
+      if (savemode == 1) {  // clone seq.
+
+        if (newredstate) {
+          if (currentSeqCopy < (numberSequences + 1)) currentSeqCopy++;
+        }
+
+        else if (newyellowstate) {
+          if (currentSeqCopy > 0) currentSeqCopy--;
+        }
+
       }
 
-      else if (savemode == 1) {  // new song
-        if (newredstate || newyellowstate) {
+      else if (savemode == 2) {  // new song
 
-          if (newyellowstate) {
-            if (NewSeqLength > 1) {
-              NewSeqLength--;
-            }
+        if (newyellowstate) {
+          if (NewSeqLength > 1) {
+            NewSeqLength--;
           }
+        }
 
-          else if (newredstate) {
-            if (NewSeqLength < 32) {
-              NewSeqLength++;
-            }
+        else if (newredstate) {
+          if (NewSeqLength < 32) {
+            NewSeqLength++;
           }
-
-          PrintLoadSaveMenu(savemode);
         }
       }
 
-      else if (savemode > 1) {
-        if (newredstate || newyellowstate) {
+      else {  // save/load/delete
 
-          if (newredstate) {
-            if (savecurX > 0) {
-              savecurX--;
-            }
+        if (newredstate) {
+          if (savecurX > 0) {
+            savecurX--;
           }
-
-          else if (newyellowstate) {
-            if (savecurX < 5) {
-              savecurX++;
-            }
-          }
-
-          PrintLoadSaveMenu(savemode);
         }
+
+        else if (newyellowstate) {
+          if (savecurX < 5) {
+            savecurX++;
+          }
+        }
+
         full = EEPROM.read(eepromaddress(16, savecurX));
       }
+
+      if (anystate) PrintLoadSaveMenu(savemode);
 
       if (newgreenstate) {
         confirmation = true;
@@ -2706,9 +2659,11 @@ void ButtonsCommands(bool anystate) {  // manage the buttons's commands
       }
     }
 
-    if (newgreenstate && confirmation) {
-      LoadSave(savemode, savecurX);
-      confirmation = false;
+    if (newgreenstate) {
+      if (confirmation) {
+        LoadSave(savemode, savecurX);
+        confirmation = false;
+      }
     }
 
     else if (newbluestate) {
@@ -2719,6 +2674,7 @@ void ButtonsCommands(bool anystate) {  // manage the buttons's commands
         else PrintSubmenu(menuitem);
       }
     }
+
   }
 
   else if (menunumber == 4) {  // Inter-Recording Popup
@@ -2749,6 +2705,13 @@ void ButtonsCommands(bool anystate) {  // manage the buttons's commands
     }
   }
 
+  if (anystate) {
+    if (confirmsound) {  // bips
+      confirmsound = false;
+      Bip(2);
+    } else Bip(1);  // do the buttons click if any button is pressed
+  }
+
   if (!(menunumber == 2 && menuitem == 16)) {  // if not in CC mapping menu, turn the led on if button is pressed
 
     if (!recording) {
@@ -2759,13 +2722,6 @@ void ButtonsCommands(bool anystate) {  // manage the buttons's commands
     digitalWrite(greenled, greenstate);
 
     if (!lockmute || menunumber > 0) digitalWrite(blueled, newbluestate);
-  }
-
-  if (anystate) {  // bips
-    if (confirmsound) {
-      confirmsound = false;
-      Bip(2);
-    } else Bip(1);  // do the buttons click if any button is pressed
   }
 
   greenispressed = greenstate;
