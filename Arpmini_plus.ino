@@ -2,7 +2,7 @@
  *  @file       Arpmini_plus.ino
  *  Project     Estorm - Arpmini+
  *  @brief      MIDI Sequencer & Arpeggiator
- *  @version    2.08
+ *  @version    2.09
  *  @author     Paolo Estorm
  *  @date       09/12/24
  *  @license    GPL v3.0 
@@ -27,7 +27,7 @@
 #include "Vocabulary.h"
 
 // system
-char version[] = "2.08";
+char version[] = "2.09";
 
 // leds
 #define yellowled 2  // yellow led pin
@@ -909,30 +909,30 @@ void HandleNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle 
       }
     }
 
-    // else if (modeselect != 1) {  // not arp mode
-    //   if (recording) {
-    //     if (playing) {
-    //       if (countTicks + 2 > (ticksPerStep / 2)) {
-    //         noteSeq[currentSeq][(countStep + 1) % seqLength] = note;  // recording & playing
-    //       } else {
-    //         noteSeq[currentSeq][countStep] = note;
-    //         QueueNote(note);
-    //       }
-    //     } else {  // recording & !playing
-    //       HandleStep();
-    //       noteSeq[currentSeq][countStep] = note;
-    //       QueueNote(note);
-    //     }
-    //   } else if (playing) rolandTransposeNote = note;  // in recmode transpose to note only if playing
-    // }
-
     else if (modeselect != 1) {  // not arp mode
       if (recording) {
-        if (!playing) HandleStep();
-        noteSeq[currentSeq][countStep] = note;
-        QueueNote(note);
+        if (playing) {
+          if (countTicks + 2 > (ticksPerStep / 2)) {
+            noteSeq[currentSeq][(countStep + 1) % seqLength] = note;  // recording & playing
+          } else {
+            noteSeq[currentSeq][countStep] = note;
+            QueueNote(note);
+          }
+        } else {  // recording & !playing
+          HandleStep();
+          noteSeq[currentSeq][countStep] = note;
+          QueueNote(note);
+        }
       } else if (playing) rolandTransposeNote = note;  // in recmode transpose to note only if playing
     }
+
+    // else if (modeselect != 1) {  // not arp mode
+    //   if (recording) {
+    //     if (!playing) HandleStep();
+    //     noteSeq[currentSeq][countStep] = note;
+    //     QueueNote(note);
+    //   } else if (playing) rolandTransposeNote = note;  // in recmode transpose to note only if playing
+    // }
 
     if (modeselect < 3) {  // not song & live mode
       if (trigMode > 0) {
