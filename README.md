@@ -6,11 +6,11 @@ Arpmini+ is a compact MIDI device, offering advanced functionality as an arpeggi
 
 Its features include:
 
-    Intuitive interface with four backlit buttons (red, yellow, green, blue), each assigned to a specific function for quick and easy control.
+    Intuitive interface with four backlit buttons, each assigned to a specific function for quick and easy control.
     All settings can be managed through the menu, which is accessed by holding the green button for 1 second from the main screen.
     Two independent MIDI inputs protected by optocouplers, ensuring reliability and electrical isolation.
     Two MIDI outputs, which share the same signal to control multiple MIDI devices simultaneously.
-    Audio control through an integrated buzzer for interface sounds, confirmations, and metronome.
+    Audio control through an integrated buzzer for interface sounds and metronome.
     The 4 buttons of Arpmini+ can be mapped and controlled by an external MIDI controller via MIDI CC, offering greater versatility and remote control.
     You can save up to 6 songs in memory (EEPROM), recalling and playing them at any time. In addition to songs, various global settings can also be saved, including:
     the MIDI channel, audio alert settings, MIDI input and output port settings and MIDI CC mapping for the buttons.
