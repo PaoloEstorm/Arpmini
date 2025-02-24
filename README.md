@@ -57,6 +57,8 @@ Arpmini+ Modes
 Load/save/edit up to 6 songs (4 traks 32 steps max), clone sequence, live/while arpeggiating & by step recording, 7 arp styles - oredered or key-press order, tempo from 20 to 250 BPM with tap-tempo, pre/post, by-root and by-keyboard traspositions, 11 music scales, bake (normalize) transpositions and scale,  jitter (range, probability and miss-note probability), up to 4 arp steps with adjustable distance, 4 arpeggiator/sequencer speeds, 3 trigger mode, swing, metronome with customizable time signature, midi channel selection, in/out sync options, external control by MIDI CC, UI sound settings, 
 (I'm working on a detailed user manual)
 
+![Diagrammi](https://github.com/user-attachments/assets/a65da5ea-358b-4575-84f3-7a3973ae311f)
+
 A simulated demo of Arpmini+ can be explored on Wokwi via the link https://wokwi.com/projects/415695537200967681
 
 ## Schematic and PCB design: https://oshwlab.com/estorm/miniseq
