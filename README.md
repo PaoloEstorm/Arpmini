@@ -69,7 +69,7 @@ Oled Display (blue): https://amzn.eu/d/c0RTBxJ
 
 Oled Display (white): https://amzn.eu/d/1IbVAiL
 
-Buttons: https://amzn.eu/d/09hONIz
+Buttons: https://amzn.eu/d/7UyjFKx
 
 Buzzer: https://amzn.eu/d/fEAc4UO
 
