@@ -124,7 +124,7 @@ public:
   }
 
   void printlnF(const char* ptr) {  // println from flash
-  
+
     printF(ptr);
     println();
   }
@@ -150,32 +150,36 @@ public:
     beginData();
 
     for (uint8_t col = 0; col < 6; col++) {  // 6 columns per character
-      uint8_t bits = getFont(data, col);     // get byte
-      if (_invState) bits = ~bits;           // inversion
-      if (_scaleX == 1) {                    // if scale is 1
-        SPI.transfer(bits);                  // output
-      } else {                               // scale 2, 3 or 4 - stretch font
-        uint32_t newData = 0;                // buffer
-        for (uint8_t i = 0, count = 0; i < 8; i++)
-          for (uint8_t j = 0; j < _scaleX; j++, count++)
-            bitWrite(newData, count, bitRead(bits, i));  // pack stretched font
+      uint8_t bits = getFont(data, col);     // get the font byte
+      if (_invState) bits = ~bits;           // invert bits if needed
 
-        for (uint8_t i = 0; i < _scaleX; i++) {  // output horizontally
+      if (_scaleX == 1) {  // scale 1: direct output
+        SPI.transfer(bits);
+      } else {  // scale 2, 3, or 4: stretch the font
+
+        uint32_t newData = 0;
+        uint8_t mask = (1 << _scaleX) - 1;  // e.g., for _scaleX = 3, mask becomes 0b111
+        for (uint8_t i = 0; i < 8; i++) {
+          if (bits & (1 << i)) {
+            newData |= (uint32_t)mask << (i * _scaleX);
+          }
+        }
+
+        // Output newData: split the buffer into 8-bit chunks
+        for (uint8_t xOffset = 0; xOffset < _scaleX; xOffset++) {
           uint8_t prevData = 0;
-          if (_x + i >= 0 && _x + i <= _maxX)                                 // within display
-            for (uint8_t j = 0; j < _scaleX; j++) {                           // output vertically
-              uint8_t data = newData >> (j * 8);                              // get buffer piece
-              if (_shift == 0) {                                              // without line shift
-                SPI.transfer(data);                                           // output
-              } else {                                                        // with shift
-                SPI.transfer((prevData >> (8 - _shift)) | (data << _shift));  // merge and output
-                prevData = data;                                              // remember previous
-              }
+          // Check if the position is within the display boundaries
+          if (_x + xOffset <= _maxX) {
+            for (uint8_t j = 0; j < _scaleX; j++) {
+              uint8_t dataByte = (newData >> (j * 8)) & 0xFF;  // extract an 8-bit segment
+              SPI.transfer((prevData >> (8 - _shift)) | (dataByte << _shift));
+              prevData = dataByte;
             }
-          if (_shift != 0) SPI.transfer(prevData >> (8 - _shift));  // output lower piece with shift
+            if (_shift != 0) SPI.transfer(prevData >> (8 - _shift));
+          }
         }
       }
-      _x += _scaleX;  // move by pixel width (1-4)
+      _x += _scaleX;
     }
 
     endTransm();
