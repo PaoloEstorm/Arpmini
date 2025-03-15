@@ -27,7 +27,7 @@
 #include "Vocabulary.h"
 
 // system
-char version[] = "2.09";
+const char version[] = "2.10";
 
 // leds
 #define yellowled 2  // yellow led pin
@@ -88,8 +88,8 @@ int8_t numbuttonspressedCC = 0;  // number of externally pressed buttons
 uint8_t mapButtonSelect = 1;  // 1=red, 2=yellow, 3=blue, 4=green
 
 // menu
-uint8_t menuitem = 2;              // is the number assiciated with every voice in the main menu. 0 to 16
-uint8_t menunumber = 0;            // 0=mainscreen, 1=menu, 2=submenu, 3=load\save menu
+uint8_t menuitem = 2;              // is the number assiciated with every voice in the main menu. 0 to 18
+uint8_t menunumber = 0;            // 0=mainscreen, 1=menu, 2=submenu, 3=load\save menu, 4=inter-recording popup
 uint8_t savemode = 0;              // 0=bake, 1=clone, 2=new, 3=save, 4=load, 5=delete
 uint8_t savecurX = 0;              // cursor position in load/save menu 0-5
 bool confirmation = false;         // confirmation popup in load/save menu
@@ -99,6 +99,7 @@ bool PrintSongLiveCursor = false;  // send the cursor to screen, song & live mod
 bool PrintTimeBar = false;         // send the BPM bar to screen
 bool StartMenuTimer = true;        // activate the go-to-menu timer
 uint8_t Jittercur = 1;             // cursor position in the jitter submenu
+bool cloneCur = false;             // cursor position in the clone seq submenu
 
 // time keeping
 volatile uint8_t clockTimeout;  // variable for keeping track of external/internal clock
@@ -138,14 +139,15 @@ int8_t numActiveNotes = 0;      // number of notes currently stored in the holdN
 uint8_t trigMode = 0;           // 0=hold, 1=trigger, 2=retrigged
 
 // sequencer
-bool recording = false;       // is the sequencer in the recording state?
-uint8_t rolandLowNote;        // for 'roland' mode, the sequence is transposed based on the lowest note recorded
-uint8_t rolandTransposeNote;  // the last note number received for transposing the sequence
-uint8_t seqLength = 16;       // the number of steps the sequence is looped for - can be less than maxSeqLength
-uint8_t NewSeqLength = 16;    // 1-32 seq.length of the newly created song
-uint8_t currentSeq = 0;       // the currently selected sequence row from the big matrix below. 0=seq1, 1=seq2, 2=seq3, 3=seq4
-uint8_t newcurrentSeq = 0;    // the next sequence is going to play in live mode. 0-3
-uint8_t currentSeqCopy = 0;
+bool recording = false;                         // is the sequencer in the recording state?
+uint8_t rolandLowNote;                          // for 'roland' mode, the sequence is transposed based on the lowest note recorded
+uint8_t rolandTransposeNote;                    // the last note number received for transposing the sequence
+uint8_t seqLength = 16;                         // the number of steps the sequence is looped for - can be less than maxSeqLength
+uint8_t NewSeqLength = 16;                      // 1-32 seq.length of the newly created song
+uint8_t currentSeq = 0;                         // the currently selected sequence row from the big matrix below. 0=seq1, 1=seq2, 2=seq3, 3=seq4
+uint8_t newcurrentSeq = 0;                      // the next sequence is going to play in live mode. 0-3
+uint8_t currentSeqDestination = 0;              // destination sequence for the cloning function
+uint8_t currentSeqSource = 0;                   // source sequence for the cloning function
 const uint8_t maxSeqLength = 32;                // the total possible number of steps (columns in the big matrix below)
 const uint8_t numberSequences = 4;              // the number of total sequences
 int8_t noteSeq[numberSequences][maxSeqLength];  // sequences arrays
@@ -188,18 +190,17 @@ void setup() {  // initialization setup
   pinMode(LED_BUILTIN_RX, INPUT);  // pin 17
 
   // initialize pins
-  pinMode(redled, OUTPUT);
-  pinMode(yellowled, OUTPUT);
-  pinMode(greenled, OUTPUT);
-  pinMode(blueled, OUTPUT);
-  pinMode(speaker, OUTPUT);
+  for (uint8_t i = 2; i <= 5; i++) {  // leds
+    pinMode(i, OUTPUT);
+  }
+
+  pinMode(speaker, OUTPUT);  // speaker
 
   AllLedsOff();
 
-  pinMode(redbutton, INPUT_PULLUP);
-  pinMode(yellowbutton, INPUT_PULLUP);
-  pinMode(bluebutton, INPUT_PULLUP);
-  pinMode(greenbutton, INPUT_PULLUP);
+  for (uint8_t i = 6; i <= 9; i++) {  // buttons
+    pinMode(i, INPUT_PULLUP);
+  }
 
   // initialize timer1 used for internal clock
   noInterrupts();
@@ -287,7 +288,7 @@ void ResetEEPROM() {  // initialize the EEPROM with default values
   for (uint8_t i = 0; i < 6; i++) {
     if (i < 4) {
       EEPROM.write(i, 1);           // midiChannel, sendrealtime, soundmode, syncport
-      EEPROM.write(4 + i, i + 21);  // buttons cc
+      EEPROM.write(4 + i, i + 30);  // buttons cc
     }
     EEPROM.write(16 + (144 * i), 0);  // songs addresses
   }
@@ -623,7 +624,7 @@ void HandleStep() {  // step sequencer
     if (numActiveNotes > 0) {
       SetArpStyle(arpstyle);  // arp sequencer
       if (!muted && playing) {
-        QueueNote(activeNotes[countStep % numActiveNotes]);  // enqueue and play
+        QueueNote(activeNotes[countStep]);  // enqueue and play
       }
     } else countStep = -1;
   }
@@ -714,18 +715,14 @@ void HandlePattern() {  // pattern sequencer in songmode
 
   if (!lockpattern) {
     pattern = (pattern + 1) % patternLength;
-    SkipPattern();
+    while (songPattern[pattern] == 0) {
+      pattern = (pattern + 1) % patternLength;
+    }
   }
 
   currentSeq = songPattern[pattern] - 1;
 
   if (menunumber == 0) PrintSongLiveCursor = true;
-}
-
-void SkipPattern() {  // skip pattern if empty
-
-  if ((songPattern[pattern]) == 0) pattern = (pattern + 1) % patternLength;
-  if ((songPattern[pattern]) == 0) SkipPattern();
 }
 
 void Metronome() {  // manage the metronome
@@ -926,14 +923,6 @@ void HandleNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle 
       } else if (playing) rolandTransposeNote = note;  // in recmode transpose to note only if playing
     }
 
-    // else if (modeselect != 1) {  // not arp mode
-    //   if (recording) {
-    //     if (!playing) HandleStep();
-    //     noteSeq[currentSeq][countStep] = note;
-    //     QueueNote(note);
-    //   } else if (playing) rolandTransposeNote = note;  // in recmode transpose to note only if playing
-    // }
-
     if (modeselect < 3) {  // not song & live mode
       if (trigMode > 0) {
         muted = false;
@@ -1008,7 +997,7 @@ void SortArray() {  // sort activeNotes array
   }
 }
 
-int SetScale(int note, uint8_t scale) {  // filter incoming note to fit in to a music scale
+int SetScale(int note, uint8_t scale) {  // adapt note to fit in to a music scale
 
   static const PROGMEM int8_t scaleOffsets[][12] = {
     { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },             // Scale 0: Linear
@@ -1138,14 +1127,8 @@ void ManageRecording() {  // recording ending setup
 
 void SetArpStyle(uint8_t style) {  // arpeggiator algorithms
 
-  switch (style) {
-    case 2:
-    case 4:
-    case 6:
-      if (countStep == -1) countStep = numActiveNotes;
-      break;
-    default:
-      break;
+  if (style % 2 == 0) {
+    if (countStep == -1) countStep = numActiveNotes;
   }
 
   uint8_t arpup = (countStep + 1) % numActiveNotes;
@@ -1748,7 +1731,6 @@ void PrintSubmenu(uint8_t item) {  // print menu 2 to the screen
         if (trigMode == 0) oled.print(F("HOLD"));
         else if (trigMode == 1) {
           oled.print(F("GATE"));
-          //numActiveNotes = 0;
         } else if (trigMode == 2) oled.print(F("RETRIG"));
       }
 
@@ -1769,13 +1751,13 @@ void PrintSubmenu(uint8_t item) {  // print menu 2 to the screen
     case 11:  // swing
       oled.printlnF(printswing);
       if (!swing) oled.printF(off);
-      else if (swing) oled.printF(on);
+      else oled.printF(on);
       break;
 
     case 12:  // metro
       oled.printlnF(printmetro);
       if (!metro) oled.printF(off);
-      else if (metro) oled.printF(on);
+      else oled.printF(on);
       PrintBottomText();
       oled.print(F("SIGN."));
       oled.print(tSignature);
@@ -1797,7 +1779,7 @@ void PrintSubmenu(uint8_t item) {  // print menu 2 to the screen
     case 15:  // sync port
       oled.println(F("PORT"));
       if (syncport == 0) oled.printF(off);
-      else if (syncport > 0) oled.print(syncport);
+      else oled.print(syncport);
       break;
 
     case 16:  // map buttons
@@ -2145,18 +2127,29 @@ void PrintLoadSaveMenu(uint8_t mode) {  // print menu 3 to the screen
   }
 
   else if (mode == 1) {  // clone seq.
-    oled.clear(0, 32, 127, 48);
     oled.print(F(" CLONE SEQ "));
     oled.invertText(0);
-    oled.setCursorXY(35, 16);
+    oled.setCursorXY(23, 16);
+
+    if (!cloneCur) {
+      oled.printF(printnext);
+    } else {
+      oled.printF(space);
+      oled.clear(0, 32, 127, 48);
+    }
+
     oled.printF(seq);
-    oled.print(currentSeq + 1);
+    oled.print(currentSeqSource + 1);
     oled.setCursorXY(58, 32);
     oled.print(F("$"));
     oled.setCursorXY(23, 48);
-    oled.printF(printnext);
+
+    if (cloneCur) {
+      oled.printF(printnext);
+    } else oled.printF(space);
+
     oled.printF(seq);
-    oled.print(currentSeqCopy + 1);
+    oled.print(currentSeqDestination + 1);
   }
 
   else if (mode == 2) {  // new song
@@ -2221,8 +2214,8 @@ void LoadSave(uint8_t mode, uint8_t number) {  // (bake/clone/new/save/load/dele
   }
 
   else if (mode == 1) {  // clone seq.
-    if (currentSeq != currentSeqCopy) {
-      CloneSequence(currentSeq, currentSeqCopy);
+    if (currentSeqSource != currentSeqDestination) {
+      CloneSequence(currentSeqSource, currentSeqDestination);
     }
     ScreenBlink();
     PrintMainScreen();
@@ -2582,6 +2575,8 @@ void ButtonsCommands(bool anystate) {  // manage the buttons's commands
     else if (newgreenstate) {
       if (menuitem == 0) {
         savecurX = 0;
+        cloneCur = false;
+        currentSeqSource = currentSeq;
         if (savemode > 0) oled.clear();
         PrintLoadSaveMenu(savemode);
         newgreenstate = false;
@@ -2608,12 +2603,27 @@ void ButtonsCommands(bool anystate) {  // manage the buttons's commands
 
       if (savemode == 1) {  // clone seq.
 
+        if (newgreenstate) {
+          if (!cloneCur) {
+            cloneCur = true;
+            newgreenstate = false;
+          }
+        }
+
         if (newredstate) {
-          if (currentSeqCopy < (numberSequences + 1)) currentSeqCopy++;
+          if (cloneCur) {
+            if (currentSeqDestination < (numberSequences + 1)) currentSeqDestination++;
+          } else {
+            if (currentSeqSource < (numberSequences + 1)) currentSeqSource++;
+          }
         }
 
         else if (newyellowstate) {
-          if (currentSeqCopy > 0) currentSeqCopy--;
+          if (cloneCur) {
+            if (currentSeqDestination > 0) currentSeqDestination--;
+          } else {
+            if (currentSeqSource > 0) currentSeqSource--;
+          }
         }
 
       }
@@ -2667,11 +2677,17 @@ void ButtonsCommands(bool anystate) {  // manage the buttons's commands
     }
 
     else if (newbluestate) {
-      if (!confirmation) PrintSubmenu(menuitem);
-      else {
+      if (!confirmation) {
+        if ((savemode != 1) || (savemode == 1 && !cloneCur)) PrintSubmenu(menuitem);
+        else if (savemode == 1 && cloneCur) {
+          cloneCur = false;
+          PrintLoadSaveMenu(savemode);
+        }
+      } else {
         confirmation = false;
-        if (savemode > 0) PrintLoadSaveMenu(savemode);
-        else PrintSubmenu(menuitem);
+        if (savemode > 0) {
+          PrintLoadSaveMenu(savemode);
+        } else PrintSubmenu(menuitem);
       }
     }
 
