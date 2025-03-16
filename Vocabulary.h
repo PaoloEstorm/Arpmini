@@ -10,9 +10,6 @@ const char song[] PROGMEM = "SONG";
 const char arp[] PROGMEM = "ARP";
 const char printmode[] PROGMEM = "MODE";
 const char printlive[] PROGMEM = "LIVE";
-const char printup[] PROGMEM = "UP";
-const char printdown[] PROGMEM = "DOWN";
-const char printrandom[] PROGMEM = "RANDOM";
 const char length[] PROGMEM = "LENGTH";
 const char select[] PROGMEM = "SELECT";
 const char edit[] PROGMEM = "EDIT";
@@ -21,7 +18,6 @@ const char speed[] PROGMEM = "SPEED";
 const char printbpm[] PROGMEM = "BPM";
 const char printswing[] PROGMEM = "SWING";
 const char printmetro[] PROGMEM = "METRO";
-const char printsound[] PROGMEM = "SOUND";
 const char file[] PROGMEM = "FILE";
 const char printpitch[] PROGMEM = "PITCH";
 const char printnote[] PROGMEM = "NOTE";
@@ -30,19 +26,13 @@ const char printstyle[] PROGMEM = "STYLE";
 const char steps[] PROGMEM = "STEPS";
 const char ext[] PROGMEM = "EXT";
 const char chain[] PROGMEM = "CHAIN";
-const char printmap[] PROGMEM = "MAP";
 const char printCC[] PROGMEM = "CC ";
-const char half[] PROGMEM = "1/8";
-const char third[] PROGMEM = "1/12";
-const char normal[] PROGMEM = "1/16";
-const char twice[] PROGMEM = "1/32";
 const char fourth[] PROGMEM = "/4";
 const char printnext[] PROGMEM = ">";
 const char printback[] PROGMEM = "<";
 const char upcursor[] PROGMEM = "^";
 const char downcursor[] PROGMEM = "_";
 const char plus[] PROGMEM = "+";
-const char minus[] PROGMEM = "-";
 const char printx[] PROGMEM = "X";
 const char percent[] PROGMEM = "%";
 
@@ -54,4 +44,16 @@ const char scaleNames[][8] PROGMEM = {
   "LINEAR", "PENTMAJ", "PENTMIN", "MAJOR", "MINOR",
   "ARABIC", "BLUES", "LOCRIAN", "LYDIAN", "DORIAN",
   "INVERSE", "HEXATON"
+};
+
+const char savemodes[][7] PROGMEM = {
+  "BAKE", "CLONE", "NEW", "SAVE", "LOAD", "DELETE"
+};
+
+const char arpmodes[][8] PROGMEM = {
+  "UP", "DOWN", "UP-DOWN", "DOWN-UP", "UP+DOWN", "DOWN+UP", "RANDOM"
+};
+
+const char speeds[][5] PROGMEM = {
+  "1/32", "1/16", "1/12", "1/8"   
 };
