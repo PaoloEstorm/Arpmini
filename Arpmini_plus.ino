@@ -27,7 +27,7 @@
 #include "Vocabulary.h"
 
 // system
-const char version[] = "2.10";
+const char version[] = "2.11";
 
 // leds
 #define yellowled 2  // yellow led pin
@@ -104,7 +104,7 @@ bool cloneCur = false;             // cursor position in the clone seq submenu
 // time keeping
 volatile uint8_t clockTimeout;  // variable for keeping track of external/internal clock
 bool internalClock = true;      // is the sequencer using the internal clock?
-uint8_t StepSpeed = 2;          // 1=2x, 2=1x, 3=3/4, 4=1/2
+uint8_t StepSpeed = 1;          // 0=2x, 1=1x, 2=3/4, 3=1/2
 bool FixSync = false;           // tries to re-allign the sequence when changing step-speeds
 bool flipflopEnable;            // part of the frameperstep flipflop
 uint8_t sendrealtime = 1;       // send midi realtime messages. 0=off, 1=on (@internalclock, only if playing), 2=on (@internalclock, always)
@@ -130,7 +130,7 @@ uint8_t BPMbuffer[iterations];  // BPM "samples" buffer for tap tempo
 const uint8_t holdNotes = 8;    // maximum number of notes that can be arpeggiated
 int8_t activeNotes[holdNotes];  // contains the MIDI notes the arpeggiator plays
 bool ArpDirection;              // alternate up-down for arpstyle 3 & 4
-uint8_t arpstyle = 1;           // 1=up, 2=down, 3=up-down, 4=down-up, 5=up+down, 6=down+up, 7=random
+uint8_t arpstyle = 0;           // 0=up, 1=down, 2=up-down, 3=down-up, 4=up+down, 5=down+up, 6=random
 uint8_t arpcount;               // number of times the arpeggio repeats
 uint8_t arprepeat = 1;          // number of times the arpeggios gets trasposed by "stepdistance"
 int8_t stepdistance = 12;       // distance in semitones between each arp repeat, -12 to +12
@@ -552,22 +552,22 @@ void RunClock() {  // main clock
 
 void SetTicksPerStep() {  // set ticksPerStep values
   switch (StepSpeed) {
-    case 1:  // 2x
+    case 0:  // 2x
       flip = swing ? 4 : 3;
       flop = swing ? 2 : 3;
       GlobalDivison = 8;
       break;
-    case 2:  // 1x
+    case 1:  // 1x
       flip = swing ? 8 : 6;
       flop = swing ? 4 : 6;
       GlobalDivison = 4;
       break;
-    case 3:  // 3/4
+    case 2:  // 3/4
       flip = 8;
       flop = 8;
       GlobalDivison = 3;
       break;
-    case 4:  // 1/2
+    case 3:  // 1/2
       flip = swing ? 16 : 12;
       flop = swing ? 8 : 12;
       GlobalDivison = 2;
@@ -591,14 +591,14 @@ uint8_t SetNoteLength() {  // set the note duration
     noteLength = random(15, 55);
   } else noteLength = noteLengths[noteLengthSelect - 1];
 
-  if (swing && StepSpeed != 3) {
+  if (swing && StepSpeed != 2) {
     if (flipflopEnable) noteLength = noteLength - 5;
     else noteLength = noteLength + 10;
   }
 
-  if (StepSpeed == 1) noteLength = noteLength * 2;
-  else if (StepSpeed == 3) noteLength = noteLength - 5;
-  else if (StepSpeed == 4) noteLength = noteLength / 2;
+  if (StepSpeed == 0) noteLength = noteLength * 2;
+  else if (StepSpeed == 2) noteLength = noteLength - 5;
+  else if (StepSpeed == 3) noteLength = noteLength / 2;
 
   return (noteLength);
 }
@@ -715,7 +715,8 @@ void HandlePattern() {  // pattern sequencer in songmode
 
   if (!lockpattern) {
     pattern = (pattern + 1) % patternLength;
-    while (songPattern[pattern] == 0) {
+
+    while (songPattern[pattern] == 0) {  // skip if empty
       pattern = (pattern + 1) % patternLength;
     }
   }
@@ -1127,7 +1128,7 @@ void ManageRecording() {  // recording ending setup
 
 void SetArpStyle(uint8_t style) {  // arpeggiator algorithms
 
-  if (style % 2 == 0) {
+  if (style % 2 != 0) {
     if (countStep == -1) countStep = numActiveNotes;
   }
 
@@ -1136,17 +1137,17 @@ void SetArpStyle(uint8_t style) {  // arpeggiator algorithms
   uint8_t arpcountplus = 1 + (arpcount % arprepeat);
 
   switch (style) {
-    case 1:  // up
+    case 0:  // up
       countStep = arpup;
       if (countStep == 0) arpcount = arpcountplus;
       break;
 
-    case 2:  // down
+    case 1:  // down
       countStep = arpdown;
       if (countStep == (numActiveNotes - 1)) arpcount = arpcountplus;
       break;
 
-    case 3:  // up-down
+    case 2:  // up-down
       if (ArpDirection) {
         countStep = arpup;
         if (countStep == 0) arpcount = arpcountplus;
@@ -1158,7 +1159,7 @@ void SetArpStyle(uint8_t style) {  // arpeggiator algorithms
       }
       break;
 
-    case 4:  // down-up
+    case 3:  // down-up
       if (ArpDirection) {
         countStep = arpdown;
         if (countStep == (numActiveNotes - 1)) arpcount = arpcountplus;
@@ -1170,7 +1171,7 @@ void SetArpStyle(uint8_t style) {  // arpeggiator algorithms
       }
       break;
 
-    case 5:  // up+down
+    case 4:  // up+down
       if (ArpDirection) {
         countStep++;
         if (countStep > (numActiveNotes - 1)) {
@@ -1187,7 +1188,7 @@ void SetArpStyle(uint8_t style) {  // arpeggiator algorithms
       }
       break;
 
-    case 6:  // down+up
+    case 5:  // down+up
       if (ArpDirection) {
         countStep--;
         if (countStep < 0) {
@@ -1204,7 +1205,7 @@ void SetArpStyle(uint8_t style) {  // arpeggiator algorithms
       }
       break;
 
-    case 7:  // random
+    case 6:  // random
       countStep = random(0, numActiveNotes);
       arpcount = random(1, arprepeat + 1);
       break;
@@ -1260,42 +1261,13 @@ void PrintMainScreen() {  // print menu 0 to the screen
     oled.print(F(" ARP MODE "));
     oled.invertText(0);
     oled.setScale(3);
-    oled.setCursorXY(0, 19);
 
-    switch (arpstyle) {
-      case 1:
-        oled.setCursorXY(48, 19);
-        oled.printF(printup);
-        break;
-      case 2:
-        oled.setCursorXY(28, 19);
-        oled.printF(printdown);
-        break;
-      case 3:
-        oled.printF(printup);
-        oled.printF(minus);
-        oled.printF(printdown);
-        break;
-      case 4:
-        oled.printF(printdown);
-        oled.printF(minus);
-        oled.printF(printup);
-        break;
-      case 5:
-        oled.printF(printup);
-        oled.printF(plus);
-        oled.printF(printdown);
-        break;
-      case 6:
-        oled.printF(printdown);
-        oled.printF(plus);
-        oled.printF(printup);
-        break;
-      case 7:
-        oled.setCursorXY(10, 19);
-        oled.printF(printrandom);
-        break;
-    }
+    if (arpstyle == 0) oled.setCursorXY(48, 19);
+    else if (arpstyle == 1) oled.setCursorXY(28, 19);
+    else if (arpstyle == 6) oled.setCursorXY(12, 19);
+    else oled.setCursorXY(2, 19);
+
+    oled.printF(arpmodes[arpstyle]);
     oled.setScale(2);
   }
 
@@ -1508,27 +1480,27 @@ void PrintMenu(uint8_t item) {  // print menu 1 to the screen
       break;
 
     case 13:  // midi channel
-      oled.println(F("MIDI"));
+      oled.println(F("MIDI*"));
       oled.print(F("CHANNEL"));
       break;
 
     case 14:  // midi realtime messages
-      oled.println(F("SEND"));
+      oled.println(F("SEND*"));
       oled.printF(sync);
       break;
 
     case 15:  // sync port
-      oled.printlnF(ext);
+      oled.println(F("EXT*"));
       oled.printF(sync);
       break;
 
     case 16:  // map buttons
-      oled.printlnF(printmap);
+      oled.println(F("MAP*"));
       oled.print(F("KEYS"));
       break;
 
     case 17:  // sound
-      oled.printF(printsound);
+      oled.println(F("SOUND*"));
       break;
 
     case 18:  // restart
@@ -1551,12 +1523,7 @@ void PrintSubmenu(uint8_t item) {  // print menu 2 to the screen
 
     case 0:  // load-save
       if (modeselect == 1 && savemode < 2) savemode = 2;
-      if (savemode == 0) oled.println(F("BAKE"));
-      else if (savemode == 1) oled.println(F("CLONE"));
-      else if (savemode == 2) oled.println(F("NEW"));
-      else if (savemode == 3) oled.println(F("SAVE"));
-      else if (savemode == 4) oled.println(F("LOAD"));
-      else if (savemode == 5) oled.println(F("DELETE"));
+      oled.printlnF(savemodes[savemode]);
       if ((savemode == 0 && modeselect == 2) || (modeselect == 3 && lockpattern) || (savemode == 1)) oled.printF(seq);
       else oled.printF(song);
       break;
@@ -1572,39 +1539,7 @@ void PrintSubmenu(uint8_t item) {  // print menu 2 to the screen
     case 2:  // arp style/seq.select/edit song/start-stop live
       if (modeselect == 1) {
         oled.printlnF(printstyle);
-
-        switch (arpstyle) {
-          case 1:
-            oled.printF(printup);
-            break;
-          case 2:
-            oled.printF(printdown);
-            break;
-          case 3:
-            oled.printF(printup);
-            oled.printF(minus);
-            oled.printF(printdown);
-            break;
-          case 4:
-            oled.printF(printdown);
-            oled.printF(minus);
-            oled.printF(printup);
-            break;
-          case 5:
-            oled.printF(printup);
-            oled.printF(plus);
-            oled.printF(printdown);
-            break;
-          case 6:
-            oled.printF(printdown);
-            oled.printF(plus);
-            oled.printF(printup);
-            break;
-          case 7:
-            oled.printF(printrandom);
-            break;
-        }
-
+        oled.printF(arpmodes[arpstyle]);
         PrintBottomText();
         if (sortnotes) {
           oled.print(F("ORDERED"));
@@ -1690,7 +1625,7 @@ void PrintSubmenu(uint8_t item) {  // print menu 2 to the screen
     case 7:  // note lenght
       oled.printlnF(length);
       if (noteLengthSelect == 0)
-        oled.printF(printrandom);
+        oled.printF("RANDOM");
       else {
         oled.print(noteLengthSelect * 20);
         oled.printF(percent);
@@ -1714,15 +1649,7 @@ void PrintSubmenu(uint8_t item) {  // print menu 2 to the screen
 
     case 9:  // arp/seq. speed
       oled.printlnF(speed);
-      if (StepSpeed == 4) {
-        oled.printF(half);
-      } else if (StepSpeed == 3) {
-        oled.printF(third);
-      } else if (StepSpeed == 2) {
-        oled.printF(normal);
-      } else if (StepSpeed == 1) {
-        oled.printF(twice);
-      }
+      oled.printlnF(speeds[StepSpeed]);
       break;
 
     case 10:  // trig.mode / chain rec / snap mode
@@ -1783,7 +1710,7 @@ void PrintSubmenu(uint8_t item) {  // print menu 2 to the screen
       break;
 
     case 16:  // map buttons
-      oled.printlnF(printmap);
+      oled.println(F("MAP"));
       oled.printF(printCC);
       AllLedsOff();
       if (mapButtonSelect == 1) {
@@ -1802,7 +1729,7 @@ void PrintSubmenu(uint8_t item) {  // print menu 2 to the screen
       break;
 
     case 17:  // sound
-      oled.printlnF(printsound);
+      oled.println(F("SOUND"));
       if (soundmode == 1) oled.printF(on);
       else if (soundmode == 2) oled.print(F("UI-"));
       if (soundmode != 1) oled.printF(off);
@@ -1838,9 +1765,9 @@ void SubmenuSettings(uint8_t item, bool dir) {  // handles changing settings in 
       if (modeselect == 1) {
         if (!greenstate) {
           if (dir == HIGH) {
-            if (arpstyle > 1) arpstyle--;
+            if (arpstyle > 0) arpstyle--;
           } else {
-            if (arpstyle < 7) arpstyle++;
+            if (arpstyle < 6) arpstyle++;
           }
         } else {
           if (dir == HIGH) {
@@ -1987,9 +1914,9 @@ void SubmenuSettings(uint8_t item, bool dir) {  // handles changing settings in 
 
     case 9:  // arp/seq. speed
       if (dir == HIGH) {
-        if (StepSpeed > 1) StepSpeed--;
+        if (StepSpeed > 0) StepSpeed--;
       } else {
-        if (StepSpeed < 4) StepSpeed++;
+        if (StepSpeed < 3) StepSpeed++;
       }
       FixSync = true;
       break;
@@ -2223,7 +2150,7 @@ void LoadSave(uint8_t mode, uint8_t number) {  // (bake/clone/new/save/load/dele
 
   else if (mode == 2) {  // new song
     playing = false;
-    StepSpeed = 2;
+    StepSpeed = 1;
     swing = false;
     noteLengthSelect = 4;
     seqLength = NewSeqLength;
@@ -2587,7 +2514,6 @@ void ButtonsCommands(bool anystate) {  // manage the buttons's commands
         modeselect = premodeselect;
         ScreenBlink();
         PrintMainScreen();
-        //newgreenstate = false;
       }
 
       else if (menuitem == 3) TapTempo();
