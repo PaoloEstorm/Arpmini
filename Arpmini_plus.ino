@@ -2,7 +2,7 @@
  *  @file       Arpmini_plus.ino
  *  Project     Estorm - Arpmini+
  *  @brief      MIDI Sequencer & Arpeggiator
- *  @version    2.09
+ *  @version    2.12
  *  @author     Paolo Estorm
  *  @date       09/12/24
  *  @license    GPL v3.0 
@@ -27,7 +27,7 @@
 #include "Vocabulary.h"
 
 // system
-const char version[] = "2.11";
+const char version[] = "2.12";
 
 // leds
 #define yellowled 2  // yellow led pin
@@ -373,7 +373,7 @@ void SynthReset() {  // clear cache
       cronLength[i] = -1;
     }
   }
-  numNotesHeld = 0;
+  numActiveNotes = 0;
   AllNotesOff();
 }
 
@@ -439,13 +439,8 @@ void ScreenBlink(bool mode = false) {  // blinks screen - 0 bip on button-press,
 
 void SetSound(uint8_t mode) {  // sound settings
 
-  if (mode == 1) {
-    sound = true;
-    uisound = true;
-  } else if (mode == 2) {
-    uisound = false;
-    sound = true;
-  } else if (mode == 3) sound = false;
+  sound = (mode != 3);
+  uisound = (mode == 1);
 }
 
 void Bip(uint8_t type) {  // sounds
@@ -758,19 +753,21 @@ void HandleStop() {  // stop the sequence and switch over to internal clock
 
   if (sendrealtime) MIDI.sendRealTime(midi::Stop);
 
-  if (menunumber == 0) {
-    if (modeselect != 4) digitalWrite(yellowled, LOW);  // turn yellowled off before 2 ticks - Tempo indicator
-    else AllLedsOff();
-  }
+  if (!internalClock) {
+    if (menunumber == 0) {
+      if (modeselect != 4) digitalWrite(yellowled, LOW);  // turn yellowled off before 2 ticks - Tempo indicator
+      else AllLedsOff();
+    }
 
-  playing = false;
-  internalClock = true;
-  Startposition();
-  numNotesHeld = 0;
+    playing = false;
+    internalClock = true;
+    Startposition();
+    numNotesHeld = 0;
 
-  if (menunumber == 0) {  // switch on display and restart screen-on timer
-    StartScreenTimer = true;
-    PrintTimeBar = true;
+    if (menunumber == 0) {  // switch on display and restart screen-on timer
+      StartScreenTimer = true;
+      PrintTimeBar = true;
+    }
   }
 }
 
@@ -1625,7 +1622,7 @@ void PrintSubmenu(uint8_t item) {  // print menu 2 to the screen
     case 7:  // note lenght
       oled.printlnF(length);
       if (noteLengthSelect == 0)
-        oled.printF("RANDOM");
+        oled.print(F("RANDOM"));
       else {
         oled.print(noteLengthSelect * 20);
         oled.printF(percent);
@@ -1978,7 +1975,7 @@ void SubmenuSettings(uint8_t item, bool dir) {  // handles changing settings in 
 
     case 14:  // send midi realtime messages
       if (!greenstate) {
-        if (dir == LOW) {
+        if (dir == HIGH) {
           if (sendrealtime < 2) sendrealtime++;
         } else {
           if (sendrealtime > 0) sendrealtime--;
@@ -2255,7 +2252,7 @@ void BakeSequence() {  // bake transpose & scale in to current seq / all seqs
   posttranspose = 0;
 }
 
-void CloneSequence(uint8_t source, uint8_t destination) {
+void CloneSequence(uint8_t source, uint8_t destination) {  // copy notes from a sequence to another
 
   for (uint8_t i = 0; i < maxSeqLength; i++) {
     noteSeq[destination][i] = noteSeq[source][i];
@@ -2297,6 +2294,8 @@ void PrintConfirmationPopup() {  // print confirmation popup in load-save menu
 }
 
 void PrintInterRecordingPopup() {  // seq. select popup
+
+  menunumber = 4;
 
   PrintTitle();
   oled.setCursorXY(28, 33);
@@ -2423,7 +2422,6 @@ void ButtonsCommands(bool anystate) {  // manage the buttons's commands
 
           if ((modeselect == 3 && !playing) || modeselect == 1) {
             if (!recording) {
-              menunumber = 4;
               PrintInterRecordingPopup();
             } else {
               recording = false;
@@ -2538,9 +2536,9 @@ void ButtonsCommands(bool anystate) {  // manage the buttons's commands
 
         if (newredstate) {
           if (cloneCur) {
-            if (currentSeqDestination < (numberSequences + 1)) currentSeqDestination++;
+            if (currentSeqDestination < (numberSequences - 1)) currentSeqDestination++;
           } else {
-            if (currentSeqSource < (numberSequences + 1)) currentSeqSource++;
+            if (currentSeqSource < (numberSequences - 1)) currentSeqSource++;
           }
         }
 
