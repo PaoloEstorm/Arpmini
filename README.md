@@ -57,7 +57,7 @@ Load/save/edit up to 60 songs (4 traks 32 steps max), clone sequence, live/while
 
 ![Wiring](https://github.com/user-attachments/assets/d4ef5a1f-47d1-4e6a-9500-db48eb0f6fc2)
 
-A simulated demo of Arpmini+ can be explored on Wokwi via the link https://wokwi.com/projects/415695537200967681
+A simulated demo of Arpmini+ can be explored on Wokwi via the link https://wokwi.com/projects/430279970010982401
 
 ## Schematic and PCB design: https://oshwlab.com/estorm/miniseq
 
