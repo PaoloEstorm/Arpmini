@@ -1,21 +1,19 @@
 # Arpmini+
 
-Arpmini+ is a compact MIDI device, offering advanced functionality as an arpeggiator, sequencer, and note recorder, designed to control external MIDI instruments. By connecting multiple Arpmini+ devices in daisy chain, you can expand its capabilities and control, creating a larger and more versatile system for live performance or music production.
+Arpmini+ is a compact MIDI device, offering advanced functionality as an arpeggiator, notes/drum sequencer and note recorder, designed to control external MIDI instruments. By connecting multiple Arpmini+ devices in daisy chain, you can expand its capabilities and control, creating a larger and more versatile system for live performance or music production.
 
 ![IMG_6585](https://github.com/user-attachments/assets/60bd7ffc-d121-4a0a-b854-e3a48006ef9f)
 
 Its features include:
 
-    Intuitive interface with four backlit buttons, each assigned to a specific function for quick and easy control.
+    Intuitive interface with four backlit buttons.
     All settings can be managed through the menu, which is accessed by holding the green button for 1 second from the main screen.
-    Two independent MIDI inputs protected by optocouplers, ensuring reliability and electrical isolation.
+    Two independent MIDI inputs protected by optocouplers.
     Two MIDI outputs, which share the same signal to control multiple MIDI devices simultaneously.
-    Audio control through an integrated buzzer for interface sounds and metronome.
     The 4 buttons of Arpmini+ can be mapped and controlled by an external MIDI controller via MIDI CC, offering greater versatility and remote control.
-    You can save up to 6 songs in memory (EEPROM), recalling and playing them at any time. In addition to songs, various global settings can also be saved, including:
-    the MIDI channel, audio alert settings, MIDI input and output port settings and MIDI CC mapping for the buttons.
+    You can save up to 60 songs in memory (EXTERNAL EEPROM). In addition to songs, various global settings can also be saved, and are indicated by an asterisk in the menu.
 
-At the core of Arpmini+ is an Arduino Pro Micro with an ATmega32u4 microcontroller, which provides USB MIDI compatibility and flexibility for future expansions.
+At the core of Arpmini+ is an Arduino Pro Micro with an ATmega32u4 microcontroller.
 
 Arpeggio Styles
 
@@ -54,7 +52,7 @@ Arpmini+ Modes
         
 ## Functionalities:
 
-Load/save/edit up to 6 songs (4 traks 32 steps max), clone sequence, live/while arpeggiating & by step recording, 7 arp styles - oredered or key-press order, tempo from 20 to 250 BPM with tap-tempo, pre/post, by-root and by-keyboard traspositions, 11 music scales, bake (normalize) transpositions and scale,  jitter (range, probability and miss-note probability), up to 4 arp steps with adjustable distance, 4 arpeggiator/sequencer speeds, 3 trigger mode, swing, metronome with customizable time signature, midi channel selection, in/out sync options, external control by MIDI CC, UI sound settings, 
+Load/save/edit up to 60 songs (4 traks 32 steps max), clone sequence, live/while arpeggiating & by step recording, 7 arp styles - oredered or key-press order, record, edit and play polyphonic drum tracks (with piano roll), tempo from 20 to 250 BPM with tap-tempo, pre/post, by-root and by-keyboard traspositions, 11 music scales, bake (normalize) transpositions and scale,  jitter (range, probability and miss-note probability), up to 4 arp steps with adjustable distance, 4 arpeggiator/sequencer speeds, 3 trigger mode, swing, metronome with customizable time signature, midi channel selection, in/out sync options, external control by MIDI CC, UI sound settings, 
 (I'm working on a detailed user manual)
 
 ![Wiring](https://github.com/user-attachments/assets/d4ef5a1f-47d1-4e6a-9500-db48eb0f6fc2)
@@ -75,4 +73,3 @@ Buzzer: https://amzn.eu/d/fEAc4UO
 
 Pin Headers: https://amzn.eu/d/9up7Byu
 
-Note: Arpmini+ uses a modified version of the GyverOLED library by @AlexGyver. Be sure to use the attached files for proper character rendering.
