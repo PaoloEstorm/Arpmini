@@ -1,6 +1,6 @@
 # Arpmini+
 
-Arpmini+ is a compact MIDI device, offering advanced functionality as an arpeggiator, notes/drum sequencer and note recorder, designed to control external MIDI instruments. By connecting multiple Arpmini+ devices in daisy chain, you can expand its capabilities and control, creating a larger and more versatile system for live performance or music production.
+Arpmini+ is a compact MIDI device, offering advanced functionality as an arpeggiator, notes/drum sequencer and recorder, designed to control external MIDI instruments. By connecting multiple Arpmini+ devices in daisy chain, you can expand its capabilities and control, creating a larger and more versatile system for live performance or music production.
 
 ![IMG_6585](https://github.com/user-attachments/assets/60bd7ffc-d121-4a0a-b854-e3a48006ef9f)
 
