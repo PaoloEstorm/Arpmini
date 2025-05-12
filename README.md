@@ -1,8 +1,9 @@
 # Arpmini+
 
-Arpmini+ is a compact MIDI device, offering advanced functionality as an arpeggiator, notes/drum sequencer and recorder, designed to control external MIDI instruments. By connecting multiple Arpmini+ devices in daisy chain, you can expand its capabilities and control, creating a larger and more versatile system for live performance or music production.
+Arpmini+ is a miniature MIDI loopstation, offering advanced functionality as an arpeggiator, notes/drum sequencer and recorder, designed to control external MIDI instruments. It's
+By connecting multiple Arpmini+ devices in daisy chain, you can expand its capabilities and control, creating a larger and more versatile system for live performance or music production.
 
-![IMG_6585](https://github.com/user-attachments/assets/60bd7ffc-d121-4a0a-b854-e3a48006ef9f)
+![IMG_7495](https://github.com/user-attachments/assets/59a98406-f041-4a77-9dd5-35d55130a431)
 
 Its features include:
 
@@ -11,7 +12,7 @@ Its features include:
     Two independent MIDI inputs protected by optocouplers.
     Two MIDI outputs, which share the same signal to control multiple MIDI devices simultaneously.
     The 4 buttons of Arpmini+ can be mapped and controlled by an external MIDI controller via MIDI CC, offering greater versatility and remote control.
-    You can save up to 60 songs in memory (EXTERNAL EEPROM). In addition to songs, various global settings can also be saved, and are indicated by an asterisk in the menu.
+    You can save up to 60 songs in memory. In addition to songs, various global settings can also be saved, and are indicated by an asterisk in the menu.
 
 At the core of Arpmini+ is an Arduino Pro Micro with an ATmega32u4 microcontroller.
 
