@@ -4,7 +4,7 @@
 #include <Arduino.h>
 #include <Print.h>
 
-#include "ARPMINI_FONT.h"
+#include "Arpmini_Font.h"
 
 #define OLED_WIDTH 128
 #define OLED_HEIGHT 64
@@ -123,6 +123,11 @@ public:
     PORTF &= ~(1 << 5);  // pin 20 low (DC)
     SPI_write(cmd1);
     SPI_write(cmd2);
+  }
+
+  void shiftX() {
+
+    setCursorXY(_x + 6, _y);
   }
 
 private:
