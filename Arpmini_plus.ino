@@ -2,7 +2,7 @@
  *  @file       Arpmini_plus.ino
  *  Project     Estorm - Arpmini+
  *  @brief      MIDI Sequencer & Arpeggiator
- *  @version    2.14
+ *  @version    2.15
  *  @author     Paolo Estorm
  *  @date       09/12/24
  *  @license    GPL v3.0 
@@ -25,30 +25,32 @@
 // https://brendanclarke.com/wp/2014/04/23/arduino-based-midi-sequencer/
 
 // system
-const char version[] PROGMEM = "2.14";
+const char version[] PROGMEM = "2.15";
 #include "Vocabulary.h"
 #include "Random8.h"
 Random8 Random;
-
+#define bitToggle8(value, bit) ((value) ^= (1 << (bit)))  // flip bit (8 bit version)
+#define bitSet8(value, bit) ((value) |= (1 << (bit)))     // set bit high (8 bit version)
 //#define INTERNALMEMORY
 
 // leds
-#define yellowled 2  // yellow led pin
-#define redled 3     // red led pin
-#define greenled 4   // green led pin
-#define blueled 5    // blue led pin
+#define yellowled 3  // yellow led pin
+#define redled 2     // red led pin
+#define greenled 5   // green led pin
+#define blueled 4    // blue led pin
 
 const uint8_t leds[4] = {
   redled, yellowled, blueled, greenled
 };
 
 // sound
-#define speaker 21          // buzzer pin
 bool uisound = true;        // is ui sound on?
 uint8_t soundmode = 1;      // 1 audio on, 2 ui sounds off, 3 off
 bool sound = true;          // speaker sound toggle
 bool metro = false;         // metronome toggle
 bool confirmsound = false;  // at button press, play the confirmation sound instead of the click
+#include "Tone8.h"
+Tone8 tone8;
 
 // screen
 #include "SPI_OLED.h"
@@ -171,7 +173,7 @@ int8_t pitch = 0;                // pitch transposition: -12 to +12
 bool pitchmode = false;          // 0=before scale, 1=scale root
 uint8_t scale = 0;               // 0=linear, 1=penta. major, 2=penta. minor, 3=major, 4=minor, 5=arabic, 6=locrian, 7=lydian, 8=dorian, 9=inverted, 10=hexa.
 int8_t posttranspose = 0;        // post-scale pitch transposition: -12 to +12
-uint8_t noteLengthSelect = 3;    // set the notelength, 0=random, 1=10%, 2=30%, 3=50%, 4=80%, 5=100%, 6=120%
+uint8_t noteLengthSelect = 3;    // set the notelength, 0=random, 1=20%, 2=40%, 3=60%, 4=80%, 5=100%, 6=120%
 bool sortnotes = true;           // sort the ActiveNotes array?
 bool muted = false;              // temporarily suspend playing any notes from the sequencer
 bool lockmute = false;           // keep the mute muted. only in arp, seq & song mode
@@ -209,7 +211,7 @@ void setup() {  // initialization setup
   EEPROM.init();
   #else
   DDRF |= (1 << 7);    // pin 18 as OUTPUT
-  PORTF &= ~(1 << 7);  // set pin 18 LOW
+  PORTF &= ~(1 << 7);  // set pin 18 LOW (LEDGND)
   #endif
 
   // oled screen initialization
@@ -264,12 +266,13 @@ void setup() {  // initialization setup
 
   AllLedsOff();
 
-  SetBPM(BPM);
   SetSound(soundmode);
   SetSyncPort(syncport);
-  ClearSeqPatternArray();
 
+  SetBPM(BPM);
+  ClearSeqPatternArray();
   SynthReset();
+  Startposition();
 
   Bip(2);  // Startup Sound
   oled.println(F("ARPMINI\n\r   +"));
@@ -280,15 +283,15 @@ void setup() {  // initialization setup
 
   delay(2000);
   PrintMainScreen();
-  Startposition();
 
   // turn off on-board LEDs
-  PORTB |= (1 << 0);  // pin 17 HIGH
-  PORTD |= (1 << 5);  // pin 30 HIGH
+  PORTB |= (1 << PB0);  // pin 17 HIGH
+  PORTD |= (1 << PD5);  // pin 30 HIGH
 }
 
 void safedigitalWrite(uint8_t pin, bool state) {  // avoid digitalwrite and i2c at the same time (external eeprom)
-  #ifdef INTERNALMEMORY                             // internal eeprom
+
+  #ifdef INTERNALMEMORY  // internal eeprom
   digitalWrite(pin, state);
   #else  // external eeprom
   if (!EEPROM.busy) digitalWrite(pin, state);
@@ -327,7 +330,7 @@ void loop() {  // run continuously
 
 void ResetEEPROM() {  // initialize the EEPROM with default values
 
-  tone(speaker, 2349, 100);
+  tone8.tone(2349, 100);
 
   for (uint8_t i = 0; i < memorySlots; i++) {
 
@@ -345,7 +348,6 @@ void ResetEEPROM() {  // initialize the EEPROM with default values
 
 unsigned int eepromaddress(unsigned int address, uint8_t slot) {  // calculate eeprom addresses (address, slot number 0-5)
 
-  //const uint8_t slotsize = 16 + (maxSeqLength * numberSequences);  // settings(16) + sequences
   return (144 * slot) + address;
 }
 
@@ -361,7 +363,7 @@ void AllLedsOn() {  // turn on all leds
   }
 }
 
-void AllLedsOff() {  // turn on all leds
+void AllLedsOff() {  // turn off all leds
 
   for (uint8_t i = 0; i <= 3; i++) {
     safedigitalWrite(leds[i], LOW);
@@ -444,12 +446,12 @@ void AllNotesOff() {  // send allnoteoff control change
 void ConnectPort(uint8_t portselect) {  // connects sync ports
 
   if (portselect == 1) {
-    MIDI.setHandleClock(HandleClock);
+    MIDI.setHandleClock(HandleExternalClock);
     MIDI.setHandleStart(HandleStart);
     MIDI.setHandleStop(HandleStop);
     MIDI.setHandleContinue(HandleContinue);
   } else if (portselect == 2) {
-    MIDI2.setHandleClock(HandleClock);
+    MIDI2.setHandleClock(HandleExternalClock);
     MIDI2.setHandleStart(HandleStart);
     MIDI2.setHandleStop(HandleStop);
     MIDI2.setHandleContinue(HandleContinue);
@@ -508,11 +510,11 @@ void Bip(uint8_t type) {  // sounds
 
   if (sound) {
     if (uisound) {
-      if (type == 1) tone(speaker, 3136, 1);        // click
-      else if (type == 2) tone(speaker, 2637, 10);  // startup/confirmation
+      if (type == 1) tone8.tone(3136, 1);        // click
+      else if (type == 2) tone8.tone(2637, 10);  // startup/confirmation
     }
-    if (type == 3) tone(speaker, 3136, 5);       // metronome
-    else if (type == 4) tone(speaker, 2349, 5);  // metronome
+    if (type == 3) tone8.tone(3136, 5);       // metronome
+    else if (type == 4) tone8.tone(2349, 5);  // metronome
   }
 }
 
@@ -554,7 +556,7 @@ void HandleInternalClock() {  // internal clock
   }
 }
 
-void HandleClock() {  // external clock
+void HandleExternalClock() {  // external clock
 
   if (!internalClock) {
     clockTimeout = 0;
@@ -672,9 +674,19 @@ void HandleStep() {  // step sequencer
     } else countStep = -1;
   }
 
-  else {  // rec. & song mode
+  else {  // rec, song & live mode
 
     countStep = (countStep + 1) % seqLength;  // seq. sequencer
+
+    if (!muted && playing && !recording && drumMode) {
+
+      for (uint8_t i = 0; i < drumSlots; i++) {  // play drums in sync
+        if (ActiveDrumNotes[i]) {
+          QueueNote(DrumNotes[i]);
+          ActiveDrumNotes[i] = false;
+        }
+      }
+    }
 
     if (modeselect == 1 || modeselect == 2) {
       if (recording) {
@@ -714,7 +726,7 @@ void HandleStep() {  // step sequencer
       }
     }
 
-    if (playing && !muted) {
+    if ((playing && !muted) || (!playing && recording)) {
       uint8_t note = noteSeq[currentSeq][countStep];
       if (note > 0) {
         if (!drumMode) {
@@ -796,6 +808,7 @@ void HandleContinue() {  // continue message - start the sequence
   internalClock = false;
   countTicks = 0;
   playing = true;
+  if (recording) Startposition();
   UpdateScreenBPM();
 }
 
@@ -856,7 +869,7 @@ void Startposition() {  // called every time the sequencing starts or stops
   if (playing && modeselect == 2) {
     if (!recording) {
       if (!lockpattern) pattern = -1;
-    }
+    } else nopattern = true;
   }
 }
 
@@ -924,29 +937,38 @@ void HandleNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle 
 
     numNotesHeld++;
 
-    if (drumMode && menunumber == 2 && menuitem == 5) {  // map drum notes menu
-      DrumNotes[curpos] = note;
-      SubmenuSettings(menuitem, 0);
-      StartScreenTimer = true;
-      Bip(2);
+    if (drumMode) {
+      if (menunumber == 2 && menuitem == 5) {  // map drum notes menu
+        DrumNotes[curpos] = note;
+        SubmenuSettings(menuitem, 0);
+        StartScreenTimer = true;
+        Bip(2);
+      }
+
+      for (uint8_t i = 0; i < drumSlots; i++) {               // check if incoming note is in the drum notes range
+        if (note == DrumNotes[i]) ActiveDrumNotes[i] = true;  // update array
+      }
     }
 
     if (!playing) {
 
       MIDI.sendNoteOn(TransposeAndScale(note), velocity, channel);  // bypass
 
-      if (modeselect != 0 && recording && !drumMode) {  // recording & !playing
-        HandleStep();
-        noteSeq[currentSeq][countStep] = note;
-        QueueNote(note);
-      }
-    } else {  // if playing
+      if (modeselect != 0 && recording) {  // recording & !playing
 
-      if (drumMode) {
-        for (uint8_t i = 0; i < drumSlots; i++) {               // check if incoming note is in the drum notes range
-          if (note == DrumNotes[i]) ActiveDrumNotes[i] = true;  // update array
+        if (countStep == -1) HandleStep();
+        if (!drumMode) noteSeq[currentSeq][countStep] = note;
+        else {
+          for (uint8_t i = 0; i < drumSlots; i++) {
+            if (ActiveDrumNotes[i]) {
+              bitToggle8(noteSeq[currentSeq][countStep], i);
+              ActiveDrumNotes[i] = false;
+            }
+          }
         }
       }
+
+    } else {  // if playing
 
       if (modeselect < 2 && trigMode > 0) {  // not song & live mode
         muted = false;
@@ -974,18 +996,18 @@ void HandleNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle 
         }
       }
 
-      else {  // not arp mode
+      else {  // not arp mode & playing
 
         if (recording) {
           uint8_t stepIndex = (countTicks + 2 > (ticksPerStep / 2)) ? (countStep + 1) % seqLength : countStep;
-          uint8_t& noteSlot = noteSeq[currentSeq][stepIndex];
 
           if (!drumMode) {
-            noteSlot = note;
+            noteSeq[currentSeq][stepIndex] = note;
           } else {
             for (uint8_t i = 0; i < drumSlots; i++) {
-              if (bitRead(noteSlot, i) == 0) {
-                bitWrite(noteSlot, i, ActiveDrumNotes[i]);
+              if (ActiveDrumNotes[i]) {
+                bitSet8(noteSeq[currentSeq][stepIndex], i);
+                ActiveDrumNotes[i] = false;
               }
             }
           }
@@ -1007,14 +1029,15 @@ void HandleNoteOff(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle
     numNotesHeld--;
     if (numNotesHeld < 0) numNotesHeld = 0;
 
-    if (!playing) MIDI.sendNoteOff(TransposeAndScale(note), velocity, channel);  // pass trough note off messages
-    else {                                                                       // if playing
-
-      if (drumMode) {
-        for (uint8_t i = 0; i < drumSlots; i++) {
-          if (note == DrumNotes[i]) ActiveDrumNotes[i] = false;
-        }
+    if (drumMode) {
+      for (uint8_t i = 0; i < drumSlots; i++) {                // check if incoming note is in the drum notes range
+        if (note == DrumNotes[i]) ActiveDrumNotes[i] = false;  // update array
       }
+    }
+
+    if (!playing) MIDI.sendNoteOff(TransposeAndScale(note), velocity, channel);  // pass trough note off messages
+
+    else {  // if playing
 
       if (modeselect == 0 && trigMode > 0 && !sustain) {  // arp mode and playing
         if (numNotesHeld == 0) muted = true;
@@ -1167,7 +1190,7 @@ void ManageRecording() {  // recording ending setup
 
   safedigitalWrite(redled, recording);  // redled
 
-  if (internalClock && !playing) {
+  if (/*internalClock &&*/ !playing) {
     Startposition();
   }
 }
@@ -1261,17 +1284,10 @@ void SetArpStyle(uint8_t style) {  // arpeggiator algorithms
   if (arprepeat < 1) arpcount = 1;
 }
 
-void PrintSmallSpace() {  // print a smaller blank space
-
-  oled.setScale(1);
-  oled.printF(space);
-  oled.setScale(2);
-}
-
-void ClearSeqPatternArray() {  // clear all Pattern and Sequences arrays
+void ClearSeqPatternArray() {  // clear all pattern and sequences arrays
 
   for (uint8_t i = 0; i < patternLength; i++) {  // clean SongPattern array
-    if (i < 4) songPattern[i] = (i + 1); // set default 1-2-3-4-1-2-3-4
+    if (i < 4) songPattern[i] = (i + 1);         // set default 1-2-3-4-1-2-3-4
     else songPattern[i] = (i - 3);
   }
 
@@ -1359,13 +1375,13 @@ void PrintBPMBar() {  // print BPM status bar to the screen
   else oled.printF(ext);
 
   if (modeselect != 3) {
-    PrintSmallSpace();
+    oled.shiftX();
   } else oled.setCursorXY(46, 32);
 
   oled.printF(printbpm);
 
   if (modeselect != 3) {
-    PrintSmallSpace();
+    oled.shiftX();
   } else oled.setCursorXY(45, 48);
 
   oled.print(tSignature);
@@ -1382,7 +1398,7 @@ void PrintPatternSequence() {  // print the sequence to the screen - song mode
   }
 }
 
-void PrintPatternSequenceCursor() {  // print the cursor to the screen - song mode
+void PrintPatternSequenceCursor() {  // print the cursor to the screen - song/live mode
 
   oled.setScale(2);
 
@@ -1408,53 +1424,7 @@ void PrintPatternSequenceCursor() {  // print the cursor to the screen - song mo
   }
 }
 
-void PrintPopup() {  // print popups
-
-  oled.setScale(2);
-  if (!editorPopup) oled.invertText(1);
-  oled.setCursorXY(28, 32);
-
-  if (menunumber == 3) {  // load-save menu
-
-    if (savemode == 0 || savemode == 1) {  // bake, clone
-      oled.setCursorXY(10, 32);
-      oled.print(F(" PROCEED?"));
-    }
-
-    else if (savemode == 2) {  // new
-      if (!drumModeSelect) oled.print(F(" SONG?"));
-      else oled.print(F(" BEAT?"));
-    }
-
-    else if (savemode == 3) {  // save
-      if (!full) oled.print(F(" SAVE?"));
-      else {
-        oled.setCursorXY(6, 32);
-        oled.print(F(" REWRITE?"));
-      }
-    }
-
-    else if (savemode > 3) {  // load & delete
-      if (!full) {
-        oled.setCursorXY(22, 32);
-        oled.print(F(" EMPTY!"));
-      } else {
-        if (savemode == 4) oled.print(F(" LOAD?"));  // load
-        else if (savemode == 5) {                    // delete
-          oled.setCursorXY(16, 32);
-          oled.print(F(" DELETE?"));
-        }
-      }
-    }
-  } else {  // inter-recording popup
-    menunumber = 4;
-    oled.print(F(" SEQ."));
-    oled.print(newcurrentSeq + 1);
-  }
-  oled.invertText(0);
-}
-
-void PrintMenu(uint8_t item) {  // print menu 1 to the screen
+void PrintMenu(uint8_t item) {  // print main menu - menu 1
 
   menunumber = 1;
 
@@ -1588,7 +1558,7 @@ void PrintMenu(uint8_t item) {  // print menu 1 to the screen
   }
 }
 
-void SubmenuSettings(uint8_t item, uint8_t dir) {  // handles changing settings in menu 2
+void SubmenuSettings(uint8_t item, uint8_t dir) {  // print & handles changing settings in menu submenu - menu 2
 
   bool keyEnable = dir;
 
@@ -2199,55 +2169,8 @@ void SubmenuSettings(uint8_t item, uint8_t dir) {  // handles changing settings 
   }
 }
 
-void PrintBeatEditor() {  // print beat editor
-
-  menunumber = 5;
-
-  oled.setCursorXY(0, 0);
-  oled.setScale(2);
-  if (!row && !colum) oled.print(F("<SEQ"));
-  else oled.print(F(">SEQ"));
-  oled.print(currentSeqEdit + 1);
-  oled.printF(space);
-
-  for (uint8_t i = 0; i < 4; i++) {  // title window view
-    if (i == window) oled.print(F("["));
-    else oled.print(F("]"));
-  }
-
-  oled.println();  // go down
-
-  for (uint8_t i = (frame * 3); i < ((frame + 1) * 3); i++) {  // print editor
-    if (i > 7) {
-      oled.clear(0, 54, 127, 63);
-      break;
-    }
-    char letter = 'A' + i;
-    oled.print(letter);
-    oled.invertText(1);
-    oled.print(F(";"));
-
-    for (uint8_t j = (window * 8); j < ((window + 1) * 8); j++) {
-      if (j > (seqLength - 1)) {
-        oled.clear(((seqLength - (window * 8)) + 2) * 12, 16, 127, 63);
-        break;
-      }
-      bool pos = (colum == j && row == i);
-      if ((bitRead(noteSeq[currentSeqEdit][j], i)) == 0) {
-        if (pos) oled.print(F(")"));
-        else oled.print(F("]"));
-      } else {
-        if (pos) oled.print(F("("));
-        else oled.print(F("["));
-      }
-    }
-    oled.invertText(0);
-    oled.println();  // go down
-  }
-}
-
 #ifdef INTERNALMEMORY
-void PrintLoadSaveMenu(uint8_t mode) {  // print menu 3 to the screen
+void PrintLoadSaveMenu(uint8_t mode) {  // print load-save menu - menu 3
 
   menunumber = 3;
 
@@ -2322,7 +2245,7 @@ void PrintLoadSaveMenu(uint8_t mode) {  // print menu 3 to the screen
   }
 }
 #else
-void PrintLoadSaveMenu(uint8_t mode) {  // print menu 3 to the screen
+void PrintLoadSaveMenu(uint8_t mode) {  // print load-save menu - menu 3
 
   menunumber = 3;
 
@@ -2416,6 +2339,99 @@ void PrintLoadSaveMenu(uint8_t mode) {  // print menu 3 to the screen
 }
 #endif
 
+void PrintPopup() {  // print popups - menu 4
+
+  oled.setScale(2);
+  if (!editorPopup) oled.invertText(1);
+  oled.setCursorXY(28, 32);
+
+  if (menunumber == 3) {  // load-save menu
+
+    if (savemode == 0 || savemode == 1) {  // bake, clone
+      oled.setCursorXY(10, 32);
+      oled.print(F(" PROCEED?"));
+    }
+
+    else if (savemode == 2) {  // new
+      if (!drumModeSelect) oled.print(F(" SONG?"));
+      else oled.print(F(" BEAT?"));
+    }
+
+    else if (savemode == 3) {  // save
+      if (!full) oled.print(F(" SAVE?"));
+      else {
+        oled.setCursorXY(6, 32);
+        oled.print(F(" REWRITE?"));
+      }
+    }
+
+    else if (savemode > 3) {  // load & delete
+      if (!full) {
+        oled.setCursorXY(22, 32);
+        oled.print(F(" EMPTY!"));
+      } else {
+        if (savemode == 4) oled.print(F(" LOAD?"));  // load
+        else if (savemode == 5) {                    // delete
+          oled.setCursorXY(16, 32);
+          oled.print(F(" DELETE?"));
+        }
+      }
+    }
+  } else {  // inter-recording popup
+    menunumber = 4;
+    oled.print(F(" SEQ."));
+    oled.print(newcurrentSeq + 1);
+  }
+  oled.invertText(0);
+}
+
+void PrintBeatEditor() {  // print beat editor - menu 5
+
+  menunumber = 5;
+
+  oled.setCursorXY(0, 0);
+  oled.setScale(2);
+  if (!row && !colum) oled.print(F("<SEQ"));
+  else oled.print(F(">SEQ"));
+  oled.print(currentSeqEdit + 1);
+  oled.printF(space);
+
+  for (uint8_t i = 0; i < 4; i++) {  // title window view
+    if (i == window) oled.print(F("["));
+    else oled.print(F("]"));
+  }
+
+  oled.println();  // go down
+
+  for (uint8_t i = (frame * 3); i < ((frame + 1) * 3); i++) {  // print editor
+    if (i > 7) {
+      oled.clear(0, 54, 127, 63);
+      break;
+    }
+    char letter = 'A' + i;
+    oled.print(letter);
+    oled.invertText(1);
+    oled.print(F(";"));
+
+    for (uint8_t j = (window * 8); j < ((window + 1) * 8); j++) {
+      if (j > (seqLength - 1)) {
+        oled.clear(((seqLength - (window * 8)) + 2) * 12, 16, 127, 63);
+        break;
+      }
+      bool pos = (colum == j && row == i);
+      if ((bitRead(noteSeq[currentSeqEdit][j], i)) == 0) {
+        if (pos) oled.print(F(")"));
+        else oled.print(F("]"));
+      } else {
+        if (pos) oled.print(F("("));
+        else oled.print(F("["));
+      }
+    }
+    oled.invertText(0);
+    oled.println();  // go down
+  }
+}
+
 void LoadSave(uint8_t mode, uint8_t number) {  // (bake/clone/new/save/load/delete, slot number 0-5)
 
   if (mode == 0) {  // bake song
@@ -2433,25 +2449,23 @@ void LoadSave(uint8_t mode, uint8_t number) {  // (bake/clone/new/save/load/dele
   }
 
   else if (mode == 2) {  // new song
+
     playing = false;
     // StepSpeed = 1;
     // swing = false;
-    // noteLengthSelect = 4;
-    seqLength = NewSeqLength;
+    // noteLengthSelect = 3;
     // BPM = 120;
     // SetBPM(BPM);
     lockpattern = false;
     pattern = 0;
-    NewSeqLength = 16;
-    drumMode = drumModeSelect;
-    ClearSeqPatternArray();
     currentSeq = 0;
-
-    modeselect = 2;
+    ClearSeqPatternArray();
+    seqLength = NewSeqLength;
+    drumMode = drumModeSelect;
+    modeselect = 1;
     premodeselect = modeselect;
     ScreenBlink();
     PrintMainScreen();
-
   }
 
   else {
@@ -2484,7 +2498,6 @@ void LoadSave(uint8_t mode, uint8_t number) {  // (bake/clone/new/save/load/dele
         pattern = 0;
 
         drumMode = (checkSlot(number) - 1);
-
         pitchmode = EEPROM.read(eepromaddress(17, number));
         pitch = EEPROM.read(eepromaddress(18, number));
         scale = EEPROM.read(eepromaddress(19, number));
@@ -2521,7 +2534,7 @@ void LoadSave(uint8_t mode, uint8_t number) {  // (bake/clone/new/save/load/dele
   }
 }
 
-void BakeSequence() {  // bake transpose & scale in to current seq / all seqs
+void BakeSequence() {  // normalize transpose & scale in to current seq / all seqs
 
   if ((modeselect == 1) || (modeselect == 2 && lockpattern)) {  // bake current Seq array
     for (uint8_t i = 0; i < maxSeqLength; i++) {
@@ -2594,7 +2607,7 @@ void DebounceButtons() {  // debounce buttons
   lastblueReading = blueReading;
 }
 
-void ButtonsCommands(bool anypressed) {  // manage the buttons's commands
+void ButtonsCommands(bool anypressed) {  // manage buttons's commands
 
   static bool redispressed = false;     // is redbutton still pressed?
   static bool yellowispressed = false;  // is yellowbutton still pressed?
@@ -2628,40 +2641,45 @@ void ButtonsCommands(bool anypressed) {  // manage the buttons's commands
 
     if (modeselect != 3) {  // not live mode
 
-      if (yellowispressed) {  // restart sequence
-        if (newgreenstate) {
-          if (!playing) playing = true;
-          Startposition();
+      if (blueispressed) {
+        if (newgreenstate) SynthReset();  // reset synth
+        else if (newredstate) {           // lock mute
+          if (!recording) lockmute = !lockmute;
         }
       }
 
-      else if (blueispressed) {
-        if (newgreenstate) SynthReset();       // reset synth
-        else if (newredstate && !recording) {  // lock mute
-          lockmute = !lockmute;
-        }
-      }
+      if (greenispressed) {
 
-      else if (greenispressed) {
-        if (newredstate) {
-          if (modeselect == 1) PrintPopup();
-          else if (modeselect == 2) {  // lock pattern
+        if (newredstate) {                    // select sequence/lock pattern
+          if (modeselect == 1) PrintPopup();  // select sequence
+          else if (modeselect == 2) {         // lock pattern
             lockpattern = !lockpattern;
             PrintPatternSequenceCursor();
           }
+        }
+
+        else if (newbluestate) {  // step-recording, go backwards
+          if (!playing && internalClock && recording) {
+            if (countStep > 0) {
+              countStep -= 2;
+              HandleStep();
+            }
+          }
+        }
+
+        else if (newyellowstate) {  // go to start position
+          Startposition();
         }
       }
 
       else if (!greenispressed) {
 
-        if (newbluestate) {  // recording and not playing bluebutton add a space
-          if (!playing && internalClock && recording && !drumMode) {
-            HandleStep();
-            noteSeq[currentSeq][countStep] = 0;
-          }
+        if (!playing && internalClock && recording) {
+          if (newgreenstate) HandleStep();                       // step-recording, go forwars
+          if (newbluestate) noteSeq[currentSeq][countStep] = 0;  // step-recording, clear step
         }
 
-        else if (newyellowstate) {  // play/stop
+        if (newyellowstate) {  // play/stop
           StartAndStop();
         }
 
@@ -2764,7 +2782,6 @@ void ButtonsCommands(bool anypressed) {  // manage the buttons's commands
       else if (menuitem == 4) TapTempo();
     }
 
-
     else if (newyellowstate) SubmenuSettings(menuitem, goDown);
     else if (newredstate) SubmenuSettings(menuitem, goUp);
   }
@@ -2782,7 +2799,7 @@ void ButtonsCommands(bool anypressed) {  // manage the buttons's commands
           }
         }
 
-        if (newredstate) {
+        else if (newredstate) {
           if (cloneCur) {
             if (currentSeqDestination < (numberSequences - 1)) currentSeqDestination++;
           } else {
@@ -2809,7 +2826,7 @@ void ButtonsCommands(bool anypressed) {  // manage the buttons's commands
         }
 
         else if (newredstate) {
-          if (NewSeqLength < 32) {
+          if (NewSeqLength < maxSeqLength) {
             NewSeqLength++;
           }
         }
@@ -2873,7 +2890,7 @@ void ButtonsCommands(bool anypressed) {  // manage the buttons's commands
 
   else if (menunumber == 4) {  // Inter-Recording Popup
 
-    if (newbluestate) {
+    if (newbluestate) {  // exit popup
       if (!editorPopup) PrintMainScreen();
       else {  // if inside editor
         editorPopup = false;
@@ -2881,7 +2898,7 @@ void ButtonsCommands(bool anypressed) {  // manage the buttons's commands
       }
     }
 
-    else if (newgreenstate) {
+    else if (newgreenstate) {  // assign seq. selection and exit popup
 
       currentSeq = newcurrentSeq;
       currentSeqEdit = newcurrentSeq;
@@ -2896,7 +2913,7 @@ void ButtonsCommands(bool anypressed) {  // manage the buttons's commands
           }
         }
 
-        nopattern = true;
+        //nopattern = true;
         IntercountStep = -1;
         if (modeselect != 1) {
           recording = true;
@@ -2909,12 +2926,12 @@ void ButtonsCommands(bool anypressed) {  // manage the buttons's commands
       }
     }
 
-    else if (newyellowstate) {
+    else if (newyellowstate) {  // seq. selection down
       if (newcurrentSeq > 0) newcurrentSeq--;
       PrintPopup();
     }
 
-    else if (newredstate) {
+    else if (newredstate) {  // seq. selection up
       if (newcurrentSeq < (numberSequences - 1)) newcurrentSeq++;
       PrintPopup();
     }
@@ -2926,36 +2943,39 @@ void ButtonsCommands(bool anypressed) {  // manage the buttons's commands
       greentristate = 2;
     }
 
-    if (greentristate == 2) {
-      if (newbluestate) {
-        StartAndStop();
-      } else if (!newgreenstate && !yellowstate && !redstate) {
-        greentristate = 0;
-      }
-    }
-
-    if (!greentristate) {
-      if ((bitRead(noteSeq[currentSeqEdit][colum], row)) == 0) bitSet(noteSeq[currentSeqEdit][colum], row);
-      else bitClear(noteSeq[currentSeqEdit][colum], row);
-    }
-
     if (!greenispressed) {
       if (newredstate) {
         if (colum < (seqLength - 1)) colum++;
       } else if (newyellowstate) {
         if (colum > 0) colum--;
       }
-    } else {
+    }
+
+    else {  // greenispressed
+
       if (newyellowstate) {
         if (row < 7) row++;
-      } else if (newredstate) {
+        greentristate = 0;
+      }
+
+      else if (newredstate) {
         if (!row && !colum) {
           editorPopup = true;
           PrintPopup();
         }
         if (row > 0) row--;
+        greentristate = 0;
       }
-      greentristate = 1;
+
+      else if (newbluestate) {
+        StartAndStop();
+        greentristate = 0;
+      }
+    }
+
+    if (greentristate == 2 && !newgreenstate) {
+      greentristate = 0;
+      bitToggle8(noteSeq[currentSeqEdit][colum], row);
     }
 
     window = colum / 8;
