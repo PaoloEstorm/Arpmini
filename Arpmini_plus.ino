@@ -2,7 +2,7 @@
  *  @file       Arpmini_plus.ino
  *  Project     Estorm - Arpmini+
  *  @brief      MIDI Sequencer & Arpeggiator
- *  @version    2.15
+ *  @version    2.16
  *  @author     Paolo Estorm
  *  @date       09/12/24
  *  @license    GPL v3.0 
@@ -25,7 +25,7 @@
 // https://brendanclarke.com/wp/2014/04/23/arduino-based-midi-sequencer/
 
 // system
-const char version[] PROGMEM = "2.15";
+const char version[] PROGMEM = "2.16";
 #include "Vocabulary.h"
 #include "Random8.h"
 Random8 Random;
@@ -298,7 +298,7 @@ void safedigitalWrite(uint8_t pin, bool state) {  // avoid digitalwrite and i2c 
   #endif
 }
 
-void SystemReset() {  // restart System
+void SystemReset() {  // restart system
 
   asm volatile(" jmp 0");
 }
@@ -866,11 +866,17 @@ void Startposition() {  // called every time the sequencing starts or stops
   flipflopEnable = false;
   ArpDirection = true;
 
-  if (playing && modeselect == 2) {
-    if (!recording) {
-      if (!lockpattern) pattern = -1;
-    } else nopattern = true;
+  if (modeselect == 2) {
+    if (recording) nopattern = true;
+    else if (playing && !lockpattern) pattern = -1;
   }
+
+
+  // if (playing && modeselect == 2) {
+  //   if (!recording) {
+  //     if (!lockpattern) pattern = -1;
+  //   } else nopattern = true;
+  // } else if (!playing && modeselect == 2 && recording) nopattern = true;
 }
 
 void UpdateScreenBPM() {  // refresh BPM indicators
@@ -2662,6 +2668,7 @@ void ButtonsCommands(bool anypressed) {  // manage buttons's commands
           if (!playing && internalClock && recording) {
             if (countStep > 0) {
               countStep -= 2;
+              nopattern = true;
               HandleStep();
             }
           }
@@ -2913,7 +2920,7 @@ void ButtonsCommands(bool anypressed) {  // manage buttons's commands
           }
         }
 
-        //nopattern = true;
+        nopattern = true;  // after popup selection
         IntercountStep = -1;
         if (modeselect != 1) {
           recording = true;
