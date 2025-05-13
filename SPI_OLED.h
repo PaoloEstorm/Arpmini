@@ -41,23 +41,26 @@ public:
 
   void init() {
 
-    DDRF |= (1 << 6) | (1 << 5);  // pin 19 & 20 as OUTPUT
+    DDRF |= (1 << PF6) | (1 << PF5);  // pin 19 & 20 as OUTPUT (RST & DC)
 
     delayMicroseconds(100);
     PORTF |= (1 << 6);  // pin 19 HIGH (RST)
 
-    DDRB |= (1 << PB2) | (1 << PB1);  // set MOSI and SCK as output
+    PORTB |= (1 << PB0);  // pin 17 HIGH (enable pull-up) (SS)
+    DDRB &= ~(1 << PB0);  // pin 17 as INPUT (SS)
+
+    DDRB |= (1 << PB2) | (1 << PB1);  // set MOSI and SCK as OUTPUT
     SPCR = (1 << SPE) | (1 << MSTR);  // Enable SPI, Master, f/4
     SPSR = (1 << SPI2X);              // Double speed, f/2 → 8 MHz
 
-    PORTF &= ~(1 << 5);  // pin 20 low (DC)
+    PORTF &= ~(1 << 5);  // pin 20 LOW (DC)
     for (uint8_t i = 0; i < 19; i++) SPI_write(pgm_read_byte(&_oled_init[i]));
   }
 
   void clear() {
 
     setWindow(0, 0, _maxX, _maxRow);
-    PORTF |= (1 << 5);  // pin 20 high (DC)
+    PORTF |= (1 << 5);  // pin 20 HIGH (DC)
     for (int i = 0; i < 1024; i++) SPI_write(0x00);
     setCursorXY(0, 0);
   }
@@ -67,7 +70,7 @@ public:
     y0 >>= 3;
     y1 >>= 3;
     setWindow(x0, y0, x1, y1);
-    PORTF |= (1 << 5);  // pin 20 high (DC)
+    PORTF |= (1 << 5);  // pin 20 HIGH (DC)
     for (uint8_t x = x0; x <= x1; x++)
       for (uint8_t y = y0; y <= y1; y++)
         SPI_write(0x00);
@@ -114,13 +117,13 @@ public:
 
   void sendCommand(uint8_t cmd1) {
 
-    PORTF &= ~(1 << 5);  // pin 20 low (DC)
+    PORTF &= ~(1 << 5);  // pin 20 LOW (DC)
     SPI_write(cmd1);
   }
 
   void sendCommand(uint8_t cmd1, uint8_t cmd2) {
 
-    PORTF &= ~(1 << 5);  // pin 20 low (DC)
+    PORTF &= ~(1 << 5);  // pin 20 LOW (DC)
     SPI_write(cmd1);
     SPI_write(cmd2);
   }
@@ -158,7 +161,7 @@ private:
         break;
     }
 
-    PORTF |= (1 << 5);  // pin 20 high (DC)
+    PORTF |= (1 << 5);  // pin 20 HIGH (DC)
 
     for (uint8_t col = 0; col < 6; col++) {  // 6 columns per character
       uint8_t bits = getFont(data, col);     // get the font byte
@@ -201,7 +204,7 @@ private:
 
   void setWindow(uint8_t x0, uint8_t y0, uint8_t x1, uint8_t y1) {
 
-    PORTF &= ~(1 << 5);  // pin 20 low (DC)
+    PORTF &= ~(1 << 5);  // pin 20 LOW (DC)
     SPI_write(0x21);     // COLUMNADDR
     SPI_write(x0);
     SPI_write(x1);
