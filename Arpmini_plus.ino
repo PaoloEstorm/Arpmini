@@ -2,7 +2,7 @@
  *  @file       Arpmini_plus.ino
  *  Project     Estorm - Arpmini+
  *  @brief      MIDI Sequencer & Arpeggiator
- *  @version    2.16
+ *  @version    2.17
  *  @author     Paolo Estorm
  *  @date       09/12/24
  *  @license    GPL v3.0 
@@ -25,7 +25,7 @@
 // https://brendanclarke.com/wp/2014/04/23/arduino-based-midi-sequencer/
 
 // system
-const char version[] PROGMEM = "2.16";
+const char version[] PROGMEM = "2.17";
 #include "Vocabulary.h"
 #include "Random8.h"
 Random8 Random;
@@ -33,18 +33,18 @@ Random8 Random;
 #define bitSet8(value, bit) ((value) |= (1 << (bit)))     // set bit high (8 bit version)
 //#define INTERNALMEMORY
 
-// leds
-#define yellowled 3  // yellow led pin
-#define redled 2     // red led pin
-#define greenled 5   // green led pin
-#define blueled 4    // blue led pin
+// LEDs
+#define yellowLED 3  // yellow LED pin
+#define redLED 2     // red LED pin
+#define greenLED 5   // green LED pin
+#define blueLED 4    // blue LED pin
 
-const uint8_t leds[4] = {
-  redled, yellowled, blueled, greenled
+const uint8_t LEDs[4] = {
+  redLED, yellowLED, blueLED, greenLED
 };
 
 // sound
-bool uisound = true;        // is ui sound on?
+bool uisound = true;        // are ui sounds enabled?
 uint8_t soundmode = 1;      // 1 audio on, 2 ui sounds off, 3 off
 bool sound = true;          // speaker sound toggle
 bool metro = false;         // metronome toggle
@@ -118,7 +118,7 @@ bool FixSync = false;              // tries to re-allign the sequence when chang
 bool flipflopEnable;               // part of the frameperstep flipflop
 uint8_t sendrealtime = 1;          // send midi realtime messages. 0=off, 1=on (@internalclock, only if playing), 2=on (@internalclock, always)
 int8_t GlobalStep;                 // keep track of note steps for metronome and tempo indicator
-uint8_t tSignature = 4;            // time signature for led indicator/metronome and beats, 1 - 8 (1*/4, 2*/4..to 8/4)
+uint8_t tSignature = 4;            // time signature for LED indicator/metronome and beats, 1 - 8 (1*/4, 2*/4..to 8/4)
 int8_t GlobalDivison = 4;          // how many steps per beat
 int8_t countBeat;                  // keep track of the time beats
 int8_t countStep;                  // keep track of note steps in seq/song mode
@@ -207,10 +207,12 @@ uint8_t window = 0;  // orizontal page/section in beat editor
 
 void setup() {  // initialization setup
 
+  DDRD &= ~(1 << PD5); // disable LED_BUILTIN_TX (on-board LED) (set as input)
+
   #ifndef INTERNALMEMORY
   EEPROM.init();
   #else
-  DDRF |= (1 << 7);    // pin 18 as OUTPUT
+  DDRF |= (1 << 7);    // pin 18 as OUTPUT (LEDGND)
   PORTF &= ~(1 << 7);  // set pin 18 LOW (LEDGND)
   #endif
 
@@ -247,7 +249,7 @@ void setup() {  // initialization setup
   MIDI2.setHandleSongPosition(HandleSongPosition);
 
   for (uint8_t i = 0; i < 4; i++) {
-    pinMode(leds[i], OUTPUT);              // initialize LEDs
+    pinMode(LEDs[i], OUTPUT);              // initialize LEDs
     pinMode(buttonPins[i], INPUT_PULLUP);  // initialize buttons
   }
 
@@ -283,10 +285,6 @@ void setup() {  // initialization setup
 
   delay(2000);
   PrintMainScreen();
-
-  // turn off on-board LEDs
-  PORTB |= (1 << PB0);  // pin 17 HIGH
-  PORTD |= (1 << PD5);  // pin 30 HIGH
 }
 
 void safedigitalWrite(uint8_t pin, bool state) {  // avoid digitalwrite and i2c at the same time (external eeprom)
@@ -356,17 +354,17 @@ uint8_t checkSlot(uint8_t slot) {  // return a value from eeprom
   return (EEPROM.read(eepromaddress(16, slot)));
 }
 
-void AllLedsOn() {  // turn on all leds
+void AllLedsOn() {  // turn on all LEDs
 
   for (uint8_t i = 0; i <= 3; i++) {
-    safedigitalWrite(leds[i], HIGH);
+    safedigitalWrite(LEDs[i], HIGH);
   }
 }
 
-void AllLedsOff() {  // turn off all leds
+void AllLedsOff() {  // turn off all LEDs
 
   for (uint8_t i = 0; i <= 3; i++) {
-    safedigitalWrite(leds[i], LOW);
+    safedigitalWrite(LEDs[i], LOW);
   }
 }
 
@@ -579,7 +577,7 @@ void RunClock() {  // main clock
 
   if (countTicks == 2 && menunumber == 0) {
     if (modeselect != 3) {
-      if (!recording || (recording && playing)) safedigitalWrite(yellowled, LOW);  // turn yellowled off before 2 ticks - Tempo indicator
+      if (!recording || (recording && playing)) safedigitalWrite(yellowLED, LOW);  // turn yellowLED off before 2 ticks - Tempo indicator
     } else {
       if (playing) AllLedsOff();
     }
@@ -694,10 +692,10 @@ void HandleStep() {  // step sequencer
           noteSeq[currentSeq][countStep] = 0;
         }
 
-        if (!playing && internalClock) {  // if recording and not playing, yellowled indicate steps
+        if (!playing && internalClock) {  // if recording and not playing, yellowLED indicate steps
           if (countStep % 4 == 0) {
-            safedigitalWrite(yellowled, HIGH);
-          } else safedigitalWrite(yellowled, LOW);
+            safedigitalWrite(yellowLED, HIGH);
+          } else safedigitalWrite(yellowLED, LOW);
         }
       }
 
@@ -752,7 +750,7 @@ void HandleStep() {  // step sequencer
     if (GlobalStep == 0 || (TrigMute && !(GlobalStep % 2))) {
       if (playing) {
         if (!muted || TrigMute) {
-          safedigitalWrite((leds[currentSeq]), HIGH);
+          safedigitalWrite((LEDs[currentSeq]), HIGH);
         } else AllLedsOn();
       }
     }
@@ -764,7 +762,7 @@ void HandleBeat() {  // tempo indicator and metronome
   countBeat = (countBeat + 1) % tSignature;
 
   if (menunumber == 0 && modeselect != 3) {
-    if (playing) safedigitalWrite(yellowled, HIGH);
+    if (playing) safedigitalWrite(yellowLED, HIGH);
   }
 
   if (playing && (recording || metro)) Metronome();
@@ -818,7 +816,7 @@ void HandleStop() {  // stop the sequence and switch over to internal clock
 
   if (!internalClock) {
     if (menunumber == 0) {
-      if (modeselect != 3) safedigitalWrite(yellowled, LOW);  // turn yellowled off before 2 ticks - Tempo indicator
+      if (modeselect != 3) safedigitalWrite(yellowLED, LOW);  // turn yellowLED off before 2 ticks - Tempo indicator
       else AllLedsOff();
     }
 
@@ -870,13 +868,6 @@ void Startposition() {  // called every time the sequencing starts or stops
     if (recording) nopattern = true;
     else if (playing && !lockpattern) pattern = -1;
   }
-
-
-  // if (playing && modeselect == 2) {
-  //   if (!recording) {
-  //     if (!lockpattern) pattern = -1;
-  //   } else nopattern = true;
-  // } else if (!playing && modeselect == 2 && recording) nopattern = true;
 }
 
 void UpdateScreenBPM() {  // refresh BPM indicators
@@ -1172,8 +1163,7 @@ void QueueNote(int8_t note) {  // send notes to the midi port
     for (uint8_t i = 0; i < queueLength; i++) {
       if ((cronLength[i] < 0) || (cronNote[i] == note)) {
         MIDI.sendNoteOn(note, defaultVelocity, midiChannel);
-        if (cronNote[i] >= 0)
-          MIDI.sendNoteOff(cronNote[i], 0, midiChannel);
+        if (cronNote[i] >= 0) MIDI.sendNoteOff(cronNote[i], 0, midiChannel);
         cronNote[i] = note;
         cronLength[i] = 100;
         return;
@@ -1194,7 +1184,7 @@ void ManageRecording() {  // recording ending setup
   }
   rolandTransposeNote = rolandLowNote;
 
-  safedigitalWrite(redled, recording);  // redled
+  safedigitalWrite(redLED, recording);  // redLED
 
   if (/*internalClock &&*/ !playing) {
     Startposition();
@@ -2140,7 +2130,7 @@ void SubmenuSettings(uint8_t item, uint8_t dir) {  // print & handles changing s
       for (uint8_t i = 0; i <= 3; i++) {
         if (mapButtonSelect == i) {
           oled.print(buttonCC[i]);
-          safedigitalWrite(leds[i], HIGH);
+          safedigitalWrite(LEDs[i], HIGH);
         }
       }
       break;
@@ -2708,7 +2698,7 @@ void ButtonsCommands(bool anypressed) {  // manage buttons's commands
 
       if (blueispressed || newbluestate) {  // toggle mute logic
         muted = lockmute ? !newbluestate : newbluestate;
-        safedigitalWrite(blueled, muted);
+        safedigitalWrite(blueLED, muted);
       }
     }
 
@@ -2783,7 +2773,7 @@ void ButtonsCommands(bool anypressed) {  // manage buttons's commands
         modeselect = premodeselect;
         ScreenBlink();
         PrintMainScreen();
-        if (lockmute) safedigitalWrite(blueled, HIGH);
+        if (lockmute) safedigitalWrite(blueLED, HIGH);
       }
 
       else if (menuitem == 4) TapTempo();
@@ -2920,7 +2910,7 @@ void ButtonsCommands(bool anypressed) {  // manage buttons's commands
           }
         }
 
-        nopattern = true;  // after popup selection
+       // nopattern = true;  // after popup selection
         IntercountStep = -1;
         if (modeselect != 1) {
           recording = true;
@@ -3002,16 +2992,16 @@ void ButtonsCommands(bool anypressed) {  // manage buttons's commands
     } else Bip(1);  // do the buttons click if any button is pressed
   }
 
-  if (!(menunumber == 2 && menuitem == 16)) {  // if not in CC mapping menu, turn the led on if button is pressed
+  if (!(menunumber == 2 && menuitem == 16)) {  // if not in CC mapping menu, turn the LED on if button is pressed
 
     if (!recording) {
-      safedigitalWrite(redled, redstate);
-      safedigitalWrite(yellowled, yellowstate);
+      safedigitalWrite(redLED, redstate);
+      safedigitalWrite(yellowLED, yellowstate);
     }
 
-    safedigitalWrite(greenled, greenstate);
+    safedigitalWrite(greenLED, greenstate);
 
-    if (menunumber > 0 || (menunumber == 0 && !lockmute)) safedigitalWrite(blueled, newbluestate);
+    if (menunumber > 0 || (menunumber == 0 && !lockmute)) safedigitalWrite(blueLED, newbluestate);
   }
 
   greenispressed = greenstate;
