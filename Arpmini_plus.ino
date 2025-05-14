@@ -2,7 +2,7 @@
  *  @file       Arpmini_plus.ino
  *  Project     Estorm - Arpmini+
  *  @brief      MIDI Sequencer & Arpeggiator
- *  @version    2.17
+ *  @version    2.18
  *  @author     Paolo Estorm
  *  @date       09/12/24
  *  @license    GPL v3.0 
@@ -25,7 +25,7 @@
 // https://brendanclarke.com/wp/2014/04/23/arduino-based-midi-sequencer/
 
 // system
-const char version[] PROGMEM = "2.17";
+const char version[] PROGMEM = "2.18";
 #include "Vocabulary.h"
 #include "Random8.h"
 Random8 Random;
@@ -163,7 +163,7 @@ const uint8_t numberSequences = 4;               // the number of total sequence
 uint8_t noteSeq[numberSequences][maxSeqLength];  // sequences arrays
 const uint8_t patternLength = 8;                 // number of patterns
 uint8_t songPattern[patternLength];              // pattern array
-uint8_t pattern = 0;                             // currently playing pattern
+int8_t pattern = 0;                              // currently playing pattern
 bool chainrec = false;                           // sequential recording in song mode?
 bool lockpattern = false;                        // block the current pattern from sequencing
 bool nopattern = false;                          // inhibit current pattern from sequencing only once
@@ -207,7 +207,7 @@ uint8_t window = 0;  // orizontal page/section in beat editor
 
 void setup() {  // initialization setup
 
-  DDRD &= ~(1 << PD5); // disable LED_BUILTIN_TX (on-board LED) (set as input)
+  DDRD &= ~(1 << PD5);  // disable LED_BUILTIN_TX (on-board LED) (set as input)
 
   #ifndef INTERNALMEMORY
   EEPROM.init();
@@ -565,14 +565,16 @@ void HandleExternalClock() {  // external clock
 
 void RunClock() {  // main clock
 
-  countTicks = (countTicks + 1) % ticksPerStep;
+  bool clockenable = (internalClock && playing) || (!internalClock);
+
+  if (clockenable) countTicks = (countTicks + 1) % ticksPerStep;
 
   if (countTicks == 0) {
     if (start) {
       start = false;
       if (sendrealtime) MIDI.sendSongPosition(0);  // make ableton live happy, without would be slightly out of sync
     }
-    if ((modeselect != 3 && (!internalClock || (internalClock && playing))) || modeselect == 3) HandleStep();
+    if ((modeselect != 3 && clockenable) || modeselect == 3) HandleStep();
   }
 
   if (countTicks == 2 && menunumber == 0) {
@@ -778,9 +780,9 @@ void HandlePattern() {  // pattern sequencer in songmode
     }
   }
 
-  currentSeq = songPattern[pattern] - 1;
+  if (songPattern[pattern]) currentSeq = songPattern[pattern] - 1;  // if current pattern is active set the sequence
 
-  if (menunumber == 0) PrintPatternSequenceCursor();
+  if (menunumber == 0) PrintPatternSequenceCursor();  // update screen
 }
 
 void Metronome() {  // manage the metronome
@@ -832,7 +834,7 @@ void StartAndStop() {  // manage starts and stops
   playing = !playing;
 
   if (internalClock) {
-    Startposition();
+    if (playing) Startposition();
     if (sendrealtime) {
       if (playing) {
         MIDI.sendRealTime(midi::Start);
@@ -1400,11 +1402,13 @@ void PrintPatternSequenceCursor() {  // print the cursor to the screen - song/li
 
   if (modeselect == 2) {  // song mode
 
-    oled.clear(0, 34, 127, 40);
-    oled.setCursorXY((pattern * 16) + 2, 32);
+    if (pattern >= 0) {  // if outside the range don't print anything
+      oled.clear(0, 34, 127, 40);
+      oled.setCursorXY((pattern * 16) + 2, 32);
 
-    if (!lockpattern) oled.printF(upcursor);
-    else oled.print(F("="));
+      if (!lockpattern) oled.printF(upcursor);
+      else oled.print(F("="));
+    }
   }
 
   else if (modeselect == 3) {  // live mode
@@ -1451,7 +1455,7 @@ void PrintMenu(uint8_t item) {  // print main menu - menu 1
       }
 
       else if (modeselect == 2) {
-        oled.printlnF(song);
+        oled.printlnF(chain);
         oled.printF(editor);
       }
 
@@ -1554,7 +1558,7 @@ void PrintMenu(uint8_t item) {  // print main menu - menu 1
   }
 }
 
-void SubmenuSettings(uint8_t item, uint8_t dir) {  // print & handles changing settings in menu submenu - menu 2
+void SubmenuSettings(uint8_t item, uint8_t dir) {  // print & handles changing settings in submenu - menu 2
 
   bool keyEnable = dir;
 
@@ -1652,6 +1656,13 @@ void SubmenuSettings(uint8_t item, uint8_t dir) {  // print & handles changing s
 
         //-----BUTTONS COMMANDS----//
         if (keyEnable) {
+
+          int8_t count = -1;
+
+          for (uint8_t i = 0; i < patternLength; i++) {  // count number of active song-patterns (minus one)
+            if (songPattern[i] > 0) count++;
+          }
+
           if (!greenstate) {
             if (dir == goUp) {
               if (curpos < 7) curpos++;
@@ -1662,16 +1673,13 @@ void SubmenuSettings(uint8_t item, uint8_t dir) {  // print & handles changing s
             if (dir == goUp) {
               if (songPattern[curpos] < numberSequences) songPattern[curpos]++;
             } else {
-              if (songPattern[curpos] > 0) {
-                if (curpos > 0) songPattern[curpos]--;
-                else if (curpos == 0 && (songPattern[curpos] > 1)) songPattern[curpos]--;
-              }
+              if ((count && songPattern[curpos] > 0) || (!count && songPattern[curpos] > 1)) songPattern[curpos]--;
             }
           }
         }
 
         //-----SCREEN COMMANDS----//
-        oled.printlnF(song);
+        oled.printlnF(chain);
         oled.setScale(2);
         PrintPatternSequence();
         oled.setCursorXY((curpos * 16), 48);
@@ -1683,8 +1691,7 @@ void SubmenuSettings(uint8_t item, uint8_t dir) {  // print & handles changing s
         muted = playing;
         confirmsound = true;
         greentristate = 1;
-        if (playing) PrintMainScreen();
-        else PrintMenu(menuitem);
+        PrintMainScreen();
       }
       break;
 
@@ -2447,11 +2454,8 @@ void LoadSave(uint8_t mode, uint8_t number) {  // (bake/clone/new/save/load/dele
   else if (mode == 2) {  // new song
 
     playing = false;
-    // StepSpeed = 1;
-    // swing = false;
-    // noteLengthSelect = 3;
-    // BPM = 120;
-    // SetBPM(BPM);
+    StepSpeed = 1;
+    noteLengthSelect = 3;
     lockpattern = false;
     pattern = 0;
     currentSeq = 0;
@@ -2624,7 +2628,7 @@ void ButtonsCommands(bool anypressed) {  // manage buttons's commands
 
   if (!greentristate) greentristate = 1;  // set greentristate to null
 
-  if (menunumber == 0) {  // main screen
+  if (menunumber == 0) {  // main screen - menu 0
 
     if (newgreenstate) {  // go to menu
       greentristate = 2;
@@ -2664,8 +2668,20 @@ void ButtonsCommands(bool anypressed) {  // manage buttons's commands
           }
         }
 
-        else if (newyellowstate) {  // go to start position
-          Startposition();
+        else if (newyellowstate) {  // go to start position or continue
+
+          if (internalClock) {
+            if (playing) {
+              Startposition();
+              if (sendrealtime) {
+                MIDI.sendRealTime(midi::Start);
+                start = true;
+              }
+            } else {
+              if (sendrealtime) MIDI.sendRealTime(midi::Continue);
+              playing = true;
+            }
+          }
         }
       }
 
@@ -2727,7 +2743,7 @@ void ButtonsCommands(bool anypressed) {  // manage buttons's commands
     }
   }
 
-  else if (menunumber == 1) {  // menu
+  else if (menunumber == 1) {  // main menu - menu 1
 
     if (newgreenstate) {  // go to submenu
       curpos = 0;
@@ -2753,7 +2769,7 @@ void ButtonsCommands(bool anypressed) {  // manage buttons's commands
     }
   }
 
-  else if (menunumber == 2) {  // submenu
+  else if (menunumber == 2) {  // submenu - menu 2
 
     if (newbluestate) PrintMenu(menuitem);  // go back to the menu
 
@@ -2783,7 +2799,7 @@ void ButtonsCommands(bool anypressed) {  // manage buttons's commands
     else if (newredstate) SubmenuSettings(menuitem, goUp);
   }
 
-  else if (menunumber == 3) {  // load/save menu
+  else if (menunumber == 3) {  // load/save menu - menu 3
 
     if (!confirmation) {
 
@@ -2885,7 +2901,7 @@ void ButtonsCommands(bool anypressed) {  // manage buttons's commands
 
   }
 
-  else if (menunumber == 4) {  // Inter-Recording Popup
+  else if (menunumber == 4) {  // inter-recording popup - menu 4
 
     if (newbluestate) {  // exit popup
       if (!editorPopup) PrintMainScreen();
@@ -2910,7 +2926,6 @@ void ButtonsCommands(bool anypressed) {  // manage buttons's commands
           }
         }
 
-       // nopattern = true;  // after popup selection
         IntercountStep = -1;
         if (modeselect != 1) {
           recording = true;
@@ -2934,7 +2949,7 @@ void ButtonsCommands(bool anypressed) {  // manage buttons's commands
     }
   }
 
-  else if (menunumber == 5) {  // Seq. Editor
+  else if (menunumber == 5) {  // beat editor - menu 5
 
     if (newgreenstate) {
       greentristate = 2;
