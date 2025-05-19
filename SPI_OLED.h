@@ -43,8 +43,9 @@ public:
 
     DDRF |= (1 << PF6) | (1 << PF5);  // pin 19 & 20 as OUTPUT (RST & DC)
 
-    delayMicroseconds(100);
-    PORTF |= (1 << 6);  // pin 19 HIGH (RST)
+    PORTF &= ~(1 << PF6);  // pin 19 LOW (RST)
+    delayMicroseconds(200);
+    PORTF |= (1 << PF6);  // pin 19 HIGH (RST)
 
     PORTB |= (1 << PB0);  // pin 17 HIGH (enable pull-up) (SS)
     DDRB &= ~(1 << PB0);  // pin 17 as INPUT (SS)
@@ -60,7 +61,7 @@ public:
   void clear() {
 
     setWindow(0, 0, _maxX, _maxRow);
-    PORTF |= (1 << 5);  // pin 20 HIGH (DC)
+    PORTF |= (1 << PF5);  // pin 20 HIGH (DC)
     for (int i = 0; i < 1024; i++) SPI_write(0x00);
     setCursorXY(0, 0);
   }
@@ -70,7 +71,7 @@ public:
     y0 >>= 3;
     y1 >>= 3;
     setWindow(x0, y0, x1, y1);
-    PORTF |= (1 << 5);  // pin 20 HIGH (DC)
+    PORTF |= (1 << PF5);  // pin 20 HIGH (DC)
     for (uint8_t x = x0; x <= x1; x++)
       for (uint8_t y = y0; y <= y1; y++)
         SPI_write(0x00);
@@ -117,13 +118,13 @@ public:
 
   void sendCommand(uint8_t cmd1) {
 
-    PORTF &= ~(1 << 5);  // pin 20 LOW (DC)
+    PORTF &= ~(1 << PF5);  // pin 20 LOW (DC)
     SPI_write(cmd1);
   }
 
   void sendCommand(uint8_t cmd1, uint8_t cmd2) {
 
-    PORTF &= ~(1 << 5);  // pin 20 LOW (DC)
+    PORTF &= ~(1 << PF5);  // pin 20 LOW (DC)
     SPI_write(cmd1);
     SPI_write(cmd2);
   }
@@ -161,7 +162,7 @@ private:
         break;
     }
 
-    PORTF |= (1 << 5);  // pin 20 HIGH (DC)
+    PORTF |= (1 << PF5);  // pin 20 HIGH (DC)
 
     for (uint8_t col = 0; col < 6; col++) {  // 6 columns per character
       uint8_t bits = getFont(data, col);     // get the font byte
