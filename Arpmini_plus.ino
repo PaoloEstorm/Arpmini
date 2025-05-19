@@ -2,7 +2,7 @@
  *  @file       Arpmini_plus.ino
  *  Project     Estorm - Arpmini+
  *  @brief      MIDI Sequencer & Arpeggiator
- *  @version    2.18
+ *  @version    2.19
  *  @author     Paolo Estorm
  *  @date       09/12/24
  *  @license    GPL v3.0 
@@ -25,7 +25,7 @@
 // https://brendanclarke.com/wp/2014/04/23/arduino-based-midi-sequencer/
 
 // system
-const char version[] PROGMEM = "2.18";
+const char version[] PROGMEM = "2.19";
 #include "Vocabulary.h"
 #include "Random8.h"
 Random8 Random;
@@ -34,10 +34,10 @@ Random8 Random;
 //#define INTERNALMEMORY
 
 // LEDs
-#define yellowLED 3  // yellow LED pin
-#define redLED 2     // red LED pin
-#define greenLED 5   // green LED pin
-#define blueLED 4    // blue LED pin
+#define yellowLED 2  // yellow LED pin
+#define redLED 3     // red LED pin
+#define greenLED 4   // green LED pin
+#define blueLED 5    // blue LED pin
 
 const uint8_t LEDs[4] = {
   redLED, yellowLED, blueLED, greenLED
@@ -328,8 +328,6 @@ void loop() {  // run continuously
 
 void ResetEEPROM() {  // initialize the EEPROM with default values
 
-  tone8.tone(2349, 100);
-
   for (uint8_t i = 0; i < memorySlots; i++) {
 
     if (i < 4) {
@@ -577,12 +575,10 @@ void RunClock() {  // main clock
     if ((modeselect != 3 && clockenable) || modeselect == 3) HandleStep();
   }
 
-  if (countTicks == 2 && menunumber == 0) {
-    if (modeselect != 3) {
-      if (!recording || (recording && playing)) safedigitalWrite(yellowLED, LOW);  // turn yellowLED off before 2 ticks - Tempo indicator
-    } else {
-      if (playing) AllLedsOff();
-    }
+  if (countTicks == 2 && playing) {  // turn yellowLED off before 2 ticks - Tempo indicator
+
+    if ((modeselect != 3 && (menunumber == 0 || menunumber == 5)) || (modeselect == 3 && menunumber == 5)) safedigitalWrite(yellowLED, LOW);
+    else if (modeselect == 3 && menunumber == 0) AllLedsOff();
   }
 
   if (modeselect < 2) {  // not song & live mode
@@ -603,8 +599,8 @@ void RunClock() {  // main clock
 
 void SetTicksPerStep() {  // set ticksPerStep values
 
-  static const uint8_t noSwingValues[] = { 3, 6, 8, 12 };
   static const uint8_t flipSwing[] = { 4, 8, 8, 16 };
+  static const uint8_t noSwingValues[] = { 3, 6, 8, 12 };  
   static const uint8_t flopSwing[] = { 2, 4, 8, 8 };
   static const uint8_t globalDiv[] = { 8, 4, 3, 2 };
 
@@ -763,7 +759,7 @@ void HandleBeat() {  // tempo indicator and metronome
 
   countBeat = (countBeat + 1) % tSignature;
 
-  if (menunumber == 0 && modeselect != 3) {
+  if (((menunumber == 0 || menunumber == 5) && modeselect != 3) || (menunumber == 5 && modeselect == 3)) {
     if (playing) safedigitalWrite(yellowLED, HIGH);
   }
 
