@@ -1,9 +1,11 @@
 # Arpmini+
 
-Arpmini+ is a miniature MIDI loopstation, offering advanced functionality as an arpeggiator, notes/drum sequencer and recorder, designed to control external MIDI instruments. It's
-By connecting multiple Arpmini+ devices in daisy chain, you can expand its capabilities and control, creating a larger and more versatile system for live performance or music production.
+Arpmini+ is a miniature MIDI loopstation, offering advanced functionality as an arpeggiator, notes/drum sequencer and recorder, designed to control external MIDI instruments.
+You can connect multiple Arpminis together creating a larger and more complex system for live performance or music production.
 
-![IMG_7495](https://github.com/user-attachments/assets/59a98406-f041-4a77-9dd5-35d55130a431)
+## Give that dusty old synth in your closet a fresh new life! Unlock a ton of advanced features and unleash your creativity with Arpmini+
+
+![IMG_7545](https://github.com/user-attachments/assets/0898df72-a166-4744-bc27-c8b8d48c6f3d)
 
 Its features include:
 
@@ -43,17 +45,16 @@ Musical Scales
 
 Arpmini+ Modes
 
-![All](https://github.com/user-attachments/assets/68c1cb12-e384-424e-9e43-bb253b8aad30)
-
+![Modes](https://github.com/user-attachments/assets/ca2bec88-29bf-4b8d-bb55-1927422d3a1b)
 
     Arp Mode: Arpeggiates the played notes based on the selected arpeggio mode.
-    Rec Mode: Records and plays back up to 4 patterns of variable length, with a maximum of 32 notes each.
-    Song Mode: Allows the user to chain up to 8 combinations of 4 recorded patterns, in any desired order.
-    Live Mode: Allows the playback of 4 different patterns, each assigned to one of the 4 buttons on Arpmini+. When a button is pressed, the associated pattern is played, and it will change when another button is pressed; otherwise, the pattern loops.
+    Rec Mode: Records and plays back up to 8 patterns of variable length, with a maximum of 32 notes each.
+    Song Mode: Allows the user to chain up 8 recorded patterns, in any desired order.
+    Live Mode: Allows the playback of one of the 8 different patterns, each assigned to one buttons/multi-button-combo.
         
 ## Functionalities:
 
-Load/save/edit up to 60 songs (4 traks 32 steps max), clone sequence, live/while arpeggiating & by step recording, 7 arp styles - oredered or key-press order, record, edit and play polyphonic drum tracks (with piano roll), tempo from 20 to 250 BPM with tap-tempo, pre/post, by-root and by-keyboard traspositions, 11 music scales, bake (normalize) transpositions and scale,  jitter (range, probability and miss-note probability), up to 4 arp steps with adjustable distance, 4 arpeggiator/sequencer speeds, 3 trigger mode, swing, metronome with customizable time signature, midi channel selection, in/out sync options, external control by MIDI CC, UI sound settings, 
+Load/save/edit up to 60 songs (8 traks 32 steps max), clone sequence, live/while arpeggiating & by step recording, 7 arp styles - oredered or key-press order, record, edit and play polyphonic drum tracks (with piano roll), tempo from 20 to 250 BPM with tap-tempo, pre/post, by-root and by-keyboard traspositions, 11 music scales, bake (normalize) transpositions and scale,  random variations (range, probability and miss-note probability), up to 4 arp steps with adjustable distance, 4 arpeggiator/sequencer speeds, 3 trigger mode, swing, metronome with customizable time signature, midi channel selection, in/out sync options, external control by MIDI CC, UI sound settings, 
 (I'm working on a detailed user manual)
 
 ![Wiring](https://github.com/user-attachments/assets/d4ef5a1f-47d1-4e6a-9500-db48eb0f6fc2)
