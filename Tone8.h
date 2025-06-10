@@ -44,8 +44,7 @@ public:
 private:
 
   void toneBegin() {
-
-    DDRF |= (1 << PF4);  // set pin 21 (A3) as output
+    
     TCCR3A = 0;
     TCCR3B = 0;
     bitSet(TCCR3B, WGM32);
