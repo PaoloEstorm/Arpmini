@@ -1,6 +1,8 @@
 // Based on "GyverOled" library by Alex Gyver, alex@alexgyver.ru
 // https://alexgyver.ru/
 
+#pragma GCC optimize ("-Os")
+
 #include <Arduino.h>
 #include <Print.h>
 
@@ -54,7 +56,7 @@ public:
     SPCR = (1 << SPE) | (1 << MSTR);  // Enable SPI, Master, f/4
     SPSR = (1 << SPI2X);              // Double speed, f/2 → 8 MHz
 
-    PORTF &= ~(1 << 5);  // pin 20 LOW (DC)
+    PORTF &= ~(1 << PF5);  // pin 20 LOW (DC)
     for (uint8_t i = 0; i < 19; i++) SPI_write(pgm_read_byte(&_oled_init[i]));
   }
 
@@ -205,7 +207,7 @@ private:
 
   void setWindow(uint8_t x0, uint8_t y0, uint8_t x1, uint8_t y1) {
 
-    PORTF &= ~(1 << 5);  // pin 20 LOW (DC)
+    PORTF &= ~(1 << PF5);  // pin 20 LOW (DC)
     SPI_write(0x21);     // COLUMNADDR
     SPI_write(x0);
     SPI_write(x1);
