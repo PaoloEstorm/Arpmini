@@ -2,7 +2,7 @@
  *  @file       Arpmini_plus.ino
  *  Project     Estorm - Arpmini+
  *  @brief      MIDI Sequencer & Arpeggiator
- *  @version    2.19
+ *  @version    2.20
  *  @author     Paolo Estorm
  *  @date       09/12/24
  *  @license    GPL v3.0 
@@ -25,13 +25,12 @@
 // https://brendanclarke.com/wp/2014/04/23/arduino-based-midi-sequencer/
 
 // system
-const char version[] PROGMEM = "2.19";
+const char version[] PROGMEM = "2.20";
 #include "Vocabulary.h"
 #include "Random8.h"
 Random8 Random;
 #define bitToggle8(value, bit) ((value) ^= (1 << (bit)))  // flip bit (8 bit version)
 #define bitSet8(value, bit) ((value) |= (1 << (bit)))     // set bit high (8 bit version)
-//#define INTERNALMEMORY
 
 // LEDs
 #define yellowLED 2  // yellow LED pin
@@ -58,14 +57,9 @@ SPI_OLED oled;                 // screen initialization
 bool StartScreenTimer = true;  // activate the screen-on timer
 
 // memory
-#ifdef INTERNALMEMORY
-#define memorySlots 6
-#include <EEPROM.h>
-#else
 #define memorySlots 60
 #include "I2C_EEPROM.h"
 I2C_EEPROM EEPROM;
-#endif
 
 // midi
 #include <MIDI.h>
@@ -155,11 +149,11 @@ uint8_t rolandTransposeNote;                     // the last note number receive
 uint8_t seqLength = 16;                          // the number of steps the sequence is looped for - can be less than maxSeqLength
 uint8_t NewSeqLength = 16;                       // 1-32 seq.length of the newly created song
 uint8_t currentSeq = 0;                          // the currently selected sequence row from the big matrix below. 0=seq1, 1=seq2, 2=seq3, 3=seq4
-uint8_t newcurrentSeq = 0;                       // the next sequence is going to play in live mode. 0-3
+uint8_t newcurrentSeq = 0;                       // the next sequence is going to play in live mode. 0-7
 uint8_t currentSeqDestination = 0;               // destination sequence for the cloning function
 uint8_t currentSeqSource = 0;                    // source sequence for the cloning function
 const uint8_t maxSeqLength = 32;                 // the total possible number of steps (columns in the big matrix below)
-const uint8_t numberSequences = 4;               // the number of total sequences
+const uint8_t numberSequences = 8;               // the number of total sequences
 uint8_t noteSeq[numberSequences][maxSeqLength];  // sequences arrays
 const uint8_t patternLength = 8;                 // number of patterns
 uint8_t songPattern[patternLength];              // pattern array
@@ -209,12 +203,7 @@ void setup() {  // initialization setup
 
   DDRD &= ~(1 << PD5);  // disable LED_BUILTIN_TX (on-board LED) (set as input)
 
-  #ifndef INTERNALMEMORY
   EEPROM.init();
-  #else
-  DDRF |= (1 << 7);    // pin 18 as OUTPUT (LEDGND)
-  PORTF &= ~(1 << 7);  // set pin 18 LOW (LEDGND)
-  #endif
 
   // oled screen initialization
   oled.init();
@@ -253,8 +242,13 @@ void setup() {  // initialization setup
     pinMode(buttonPins[i], INPUT_PULLUP);  // initialize buttons
   }
 
+  // speaker initialization
+  DDRF |= (1 << PF4);    // set pin 21 (A3) as output
+  PORTF &= ~(1 << PF4);  // set pin 21 (A3) LOW
+
   if (!(digitalRead(yellowbutton) && digitalRead(bluebutton))) ResetEEPROM();  // yellowbutton + bluebutton, initialize the EEPROM with default values
 
+  // load default settings from EEPROM
   midiChannel = EEPROM.read(0);
   sendrealtime = EEPROM.read(1);
   soundmode = EEPROM.read(2);
@@ -277,6 +271,7 @@ void setup() {  // initialization setup
   Startposition();
 
   Bip(2);  // Startup Sound
+  oled.setCursorXY(2, 0);
   oled.println(F("ARPMINI\n\r   +"));
   oled.setScale(1);
   oled.setCursorXY(25, 56);
@@ -289,11 +284,7 @@ void setup() {  // initialization setup
 
 void safedigitalWrite(uint8_t pin, bool state) {  // avoid digitalwrite and i2c at the same time (external eeprom)
 
-  #ifdef INTERNALMEMORY  // internal eeprom
-  digitalWrite(pin, state);
-  #else  // external eeprom
   if (!EEPROM.busy) digitalWrite(pin, state);
-  #endif
 }
 
 void SystemReset() {  // restart system
@@ -331,25 +322,22 @@ void ResetEEPROM() {  // initialize the EEPROM with default values
   for (uint8_t i = 0; i < memorySlots; i++) {
 
     if (i < 4) {
-      EEPROM.write(i, 1);           // midiChannel, sendrealtime, soundmode, syncport
-      EEPROM.write(4 + i, i + 30);  // buttons cc
+      EEPROM.update(i, 1);           // midiChannel, sendrealtime, soundmode, syncport
+      EEPROM.update(4 + i, i + 30);  // buttons cc
     }
-    EEPROM.write(16 + (144 * i), 0);  // songs addresses
+
+    EEPROM.update(eepromaddress(16, i), 0);  // songs addresses
   }
 
   for (uint8_t i = 0; i < drumSlots; i++) {
-    EEPROM.write(8 + i, i + 48);
+    EEPROM.update(8 + i, i + 48);
   }
 }
 
 unsigned int eepromaddress(unsigned int address, uint8_t slot) {  // calculate eeprom addresses (address, slot number 0-5)
 
-  return (144 * slot) + address;
-}
-
-uint8_t checkSlot(uint8_t slot) {  // return a value from eeprom
-
-  return (EEPROM.read(eepromaddress(16, slot)));
+  uint16_t slotsize = (numberSequences * maxSeqLength) + 16;
+  return (slotsize * slot) + address;
 }
 
 void AllLedsOn() {  // turn on all LEDs
@@ -413,7 +401,7 @@ void ScreenOnTimer() {  // in the main screen if greenbutton is held for 4 secon
     TimerState = false;
 
     // Check if the screen should be turned off or dimmed
-    if (menunumber == 0 && ((modeselect != 2) || (modeselect == 2 && !recording && !playing && internalClock))) {
+    if (menunumber == 0 && !recording && !playing && internalClock) {
       oled.sendCommand(OLED_DISPLAY_OFF);
     } else {
       oled.setContrast(1);
@@ -600,7 +588,7 @@ void RunClock() {  // main clock
 void SetTicksPerStep() {  // set ticksPerStep values
 
   static const uint8_t flipSwing[] = { 4, 8, 8, 16 };
-  static const uint8_t noSwingValues[] = { 3, 6, 8, 12 };  
+  static const uint8_t noSwingValues[] = { 3, 6, 8, 12 };
   static const uint8_t flopSwing[] = { 2, 4, 8, 8 };
   static const uint8_t globalDiv[] = { 8, 4, 3, 2 };
 
@@ -748,7 +736,20 @@ void HandleStep() {  // step sequencer
     if (GlobalStep == 0 || (TrigMute && !(GlobalStep % 2))) {
       if (playing) {
         if (!muted || TrigMute) {
-          safedigitalWrite((LEDs[currentSeq]), HIGH);
+          if (currentSeq < 4) safedigitalWrite((LEDs[currentSeq]), HIGH);
+          else if (currentSeq == 4) {
+            safedigitalWrite(yellowLED, HIGH);
+            safedigitalWrite(redLED, HIGH);
+          } else if (currentSeq == 5) {
+            safedigitalWrite(blueLED, HIGH);
+            safedigitalWrite(greenLED, HIGH);
+          } else if (currentSeq == 6) {
+            safedigitalWrite(blueLED, HIGH);
+            safedigitalWrite(redLED, HIGH);
+          } else if (currentSeq == 7) {
+            safedigitalWrite(yellowLED, HIGH);
+            safedigitalWrite(greenLED, HIGH);
+          }
         } else AllLedsOn();
       }
     }
@@ -922,8 +923,8 @@ void HandleCC(uint8_t channel, uint8_t cc, uint8_t value) {  // handle midi CC m
     else if (cc == 64) {  // sustain pedal cc
       sustain = value;
       if (!playing || (playing && trigMode == 0)) MIDI.sendControlChange(cc, value, channel);  // pass through sustain pedal cc
-    }
-  } else MIDI.sendControlChange(cc, value, channel);
+    } else MIDI.sendControlChange(cc, value, channel); // pass through every other cc
+  } else MIDI.sendControlChange(cc, value, channel); // pass through if different channel cc
 }
 
 void HandleNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle a noteOn event
@@ -1301,7 +1302,7 @@ void PrintMainScreen() {  // print menu 0 to the screen
 
   if (modeselect < 2) oled.setCursorXY(4, 0);
 
-  oled.printF(modenames[modeselect]);
+  oled.printlnF(modenames[modeselect]);
   oled.invertText(0);
 
   if (modeselect == 0) {  // arp mode screen
@@ -1332,16 +1333,14 @@ void PrintMainScreen() {  // print menu 0 to the screen
   }
 
   else if (modeselect == 3) {  // live mode screen
-
     if (lockmute) {
       lockmute = false;
       muted = false;
     }
-
-    for (uint8_t i = 0; i < 4; ++i) {
-      oled.setCursorXY(((i < 2) ? 13 : 102), ((i % 2 == 0) ? 16 : 48));
-      oled.print(i + 1);
-    }
+    oled.shiftX();
+    oled.println(F("1 5 7 6 3"));
+    oled.shiftX();
+    oled.print(F("2   8   4"));
     PrintPatternSequenceCursor();
   }
 
@@ -1351,33 +1350,17 @@ void PrintMainScreen() {  // print menu 0 to the screen
 void PrintBPMBar() {  // print BPM status bar to the screen
 
   oled.setScale(2);
-
-  if (modeselect != 3) oled.clear(0, 54, 127, 63);
-  else oled.clear(40, 16, 86, 31);
+  oled.clear(0, 54, 127, 63);
 
   if ((internalClock && BPM > 99) || (!internalClock)) {
-    if (modeselect != 3) oled.setCursorXY(4, 48);
-    else oled.setCursorXY(46, 16);
-  }
-
-  else if (internalClock && BPM < 100) {
-    if (modeselect != 3) oled.setCursorXY(11, 48);
-    else oled.setCursorXY(52, 16);
-  }
-
+    oled.setCursorXY(4, 48);
+  } else oled.setCursorXY(11, 48);
+  
   if (internalClock) oled.print(BPM);
   else oled.printF(ext);
-
-  if (modeselect != 3) {
-    oled.shiftX();
-  } else oled.setCursorXY(46, 32);
-
+  oled.shiftX();
   oled.printF(printbpm);
-
-  if (modeselect != 3) {
-    oled.shiftX();
-  } else oled.setCursorXY(45, 48);
-
+  oled.shiftX();
   oled.print(tSignature);
   oled.printF(fourth);
 }
@@ -1394,13 +1377,18 @@ void PrintPatternSequence() {  // print the sequence to the screen - song mode
 
 void PrintPatternSequenceCursor() {  // print the cursor to the screen - song/live mode
 
-  oled.setScale(2);
-
   if (modeselect == 2) {  // song mode
 
+    static uint8_t lastpattern = 0;
+
     if (pattern >= 0) {  // if outside the range don't print anything
-      oled.clear(0, 34, 127, 40);
-      oled.setCursorXY((pattern * 16) + 2, 32);
+
+      for (uint8_t i = 0; i < 2; i++) {  // clear previous cursor and set new position
+        oled.setCursorXY((lastpattern * 16) + 2, 32);
+        if (i) break;
+        oled.printF(space);
+        lastpattern = pattern;
+      }
 
       if (!lockpattern) oled.printF(upcursor);
       else oled.print(F("="));
@@ -1409,14 +1397,18 @@ void PrintPatternSequenceCursor() {  // print the cursor to the screen - song/li
 
   else if (modeselect == 3) {  // live mode
 
-    oled.clear(11, 32, 25, 40);
-    oled.clear(100, 32, 114, 40);
+    static uint8_t cursorX[8] = { 18, 18, 114, 114, 42, 90, 66, 66 };
+    static uint8_t cursorY[8] = { 16, 32, 16, 32, 16, 16, 16, 32 };
+    static uint8_t lastseq = 0;
 
-    if (currentSeq < 2) oled.setCursorXY(13, 32);
-    else oled.setCursorXY(102, 32);
+    for (uint8_t i = 0; i < 2; i++) {  // clear previous cursor and set new position
+      oled.setCursorXY(cursorX[lastseq], cursorY[lastseq]);
+      if (i) break;
+      oled.printF(space);
+      lastseq = currentSeq;
+    }
 
-    if (currentSeq % 2 == 0) oled.printF(upcursor);
-    else oled.printF(downcursor);
+    oled.printF(printback);
   }
 }
 
@@ -2168,82 +2160,6 @@ void SubmenuSettings(uint8_t item, uint8_t dir) {  // print & handles changing s
   }
 }
 
-#ifdef INTERNALMEMORY
-void PrintLoadSaveMenu(uint8_t mode) {  // print load-save menu - menu 3
-
-  menunumber = 3;
-
-  if (mode == 0) {  // bake song
-    confirmation = true;
-    PrintPopup();
-  } else {
-
-    if (mode != 2) oled.setCursorXY(0, 0);
-    else oled.setCursorXY(5, 0);
-    PrintTitle();
-
-    if (mode != 5) oled.printF(space);
-    else oled.print(F("  "));
-    oled.printF(savemodes[mode]);
-    if (mode == 1) oled.println(F(" SEQ "));
-    else if (mode == 5) oled.println(F("  "));
-    else oled.println(F(" SONG "));
-    oled.invertText(0);
-
-    if (mode == 1) {  // clone seq.
-      oled.setCursorXY(23, 16);
-      if (!cloneCur) {
-        oled.printF(printnext);
-      } else {
-        oled.printF(space);
-        oled.clear(0, 32, 127, 48);
-      }
-      oled.printF(seq);
-      oled.print(currentSeqSource + 1);
-      oled.setCursorXY(58, 32);
-      oled.print(F("$"));
-      oled.setCursorXY(23, 48);
-      if (cloneCur) {
-        oled.printF(printnext);
-      } else oled.printF(space);
-      oled.printF(seq);
-      oled.print(currentSeqDestination + 1);
-    }
-
-    else if (mode == 2) {  // new song
-      oled.setCursorXY(5, 16);
-      oled.printF(seq);
-      oled.printF(length);
-      oled.setScale(3);
-      oled.clear(0, 32, 127, 48);
-      if (NewSeqLength > 9) oled.setCursorXY(45, 32);
-      else oled.setCursorXY(56, 32);
-      oled.print(NewSeqLength);
-    }
-
-    else if (mode > 1) {  // save, load, delete song
-
-      oled.clear(48, 32, 65, 42);  // clean popup-area
-
-      for (uint8_t i = 0; i < 6; i++) {
-        if (i < 3) oled.setCursorXY(0, (i + 1) * 16);
-        else oled.setCursorXY(65, (i - 2) * 16);
-
-        uint8_t drumsong = checkSlot(i);
-
-        if (drumsong) {
-          if (drumsong == 1) oled.print(F("SNG"));
-          else oled.print(F("DRM"));
-          oled.print(i + 1);
-        } else oled.print(F("----"));
-
-        if (i == savecurX) oled.print(F("<"));
-        else oled.printF(space);
-      }
-    }
-  }
-}
-#else
 void PrintLoadSaveMenu(uint8_t mode) {  // print load-save menu - menu 3
 
   menunumber = 3;
@@ -2317,7 +2233,7 @@ void PrintLoadSaveMenu(uint8_t mode) {  // print load-save menu - menu 3
         if (i < 3) oled.setCursorXY(0, (i + 1) * 16);
         else oled.setCursorXY(65, (i - 2) * 16);
 
-        uint8_t drumsong = checkSlot(loc);
+        uint8_t drumsong = (EEPROM.read(eepromaddress(16, loc)));
 
         if (drumsong) {
           if (loc < 9) {
@@ -2336,7 +2252,6 @@ void PrintLoadSaveMenu(uint8_t mode) {  // print load-save menu - menu 3
     }
   }
 }
-#endif
 
 void PrintPopup() {  // print popups - menu 4
 
@@ -2455,6 +2370,10 @@ void LoadSave(uint8_t mode, uint8_t number) {  // (bake/clone/new/save/load/dele
     lockpattern = false;
     pattern = 0;
     currentSeq = 0;
+    pitch = 0;
+    pitchmode = false;
+    scale = 0;
+    posttranspose = 0;
     ClearSeqPatternArray();
     seqLength = NewSeqLength;
     drumMode = drumModeSelect;
@@ -2469,19 +2388,18 @@ void LoadSave(uint8_t mode, uint8_t number) {  // (bake/clone/new/save/load/dele
     if (mode == 3) {  // save song
       EEPROM.update((eepromaddress(16, number)), (drumMode + 1));
       EEPROM.update((eepromaddress(17, number)), pitchmode);
-      EEPROM.update((eepromaddress(18, number)), pitch);
+      EEPROM.update((eepromaddress(18, number)), (pitch + 12));
       EEPROM.update((eepromaddress(19, number)), scale);
-      EEPROM.update((eepromaddress(20, number)), posttranspose);
+      EEPROM.update((eepromaddress(20, number)), (posttranspose + 12));
       EEPROM.update((eepromaddress(21, number)), seqLength);
       EEPROM.update((eepromaddress(22, number)), BPM);
       EEPROM.update((eepromaddress(23, number)), swing);
 
-      for (uint8_t i = 24; i <= 159; i++) {
-        if (i <= 31) EEPROM.update((eepromaddress(i, number)), songPattern[i - 24]);        // save SongPattern array
-        else if (i <= 63) EEPROM.update((eepromaddress(i, number)), noteSeq[0][i - 32]);    // save Seq.1 array
-        else if (i <= 95) EEPROM.update((eepromaddress(i, number)), noteSeq[1][i - 64]);    // save Seq.2 array
-        else if (i <= 127) EEPROM.update((eepromaddress(i, number)), noteSeq[2][i - 96]);   // save Seq.3 array
-        else if (i <= 159) EEPROM.update((eepromaddress(i, number)), noteSeq[3][i - 128]);  // save Seq.4 array
+      for (uint8_t i = 0; i < numberSequences; i++) {
+        EEPROM.update((eepromaddress(i + 24, number)), songPattern[i]);  // save SongPattern array
+        for (uint8_t j = 0; j < seqLength; j++) {
+          EEPROM.update((eepromaddress(j + (32 * (i + 1)), number)), noteSeq[i][j]);  // save all Seq. arrays
+        }
       }
 
       ScreenBlink();
@@ -2492,22 +2410,22 @@ void LoadSave(uint8_t mode, uint8_t number) {  // (bake/clone/new/save/load/dele
         playing = false;
         lockpattern = false;
         pattern = 0;
+        ClearSeqPatternArray();
 
-        drumMode = (checkSlot(number) - 1);
+        drumMode = (EEPROM.read(eepromaddress(16, number)) - 1);
         pitchmode = EEPROM.read(eepromaddress(17, number));
-        pitch = EEPROM.read(eepromaddress(18, number));
+        pitch = (EEPROM.read(eepromaddress(18, number)) - 12);
         scale = EEPROM.read(eepromaddress(19, number));
-        posttranspose = EEPROM.read(eepromaddress(20, number));
+        posttranspose = (EEPROM.read(eepromaddress(20, number)) - 12);
         seqLength = EEPROM.read(eepromaddress(21, number));
         BPM = EEPROM.read(eepromaddress(22, number));
         swing = EEPROM.read(eepromaddress(23, number));
 
-        for (uint8_t i = 24; i <= 159; i++) {
-          if (i <= 31) songPattern[i - 24] = EEPROM.read(eepromaddress(i, number));        // load SongPattern array
-          else if (i <= 63) noteSeq[0][i - 32] = EEPROM.read(eepromaddress(i, number));    // load Seq.1 array
-          else if (i <= 95) noteSeq[1][i - 64] = EEPROM.read(eepromaddress(i, number));    // load Seq.2 array
-          else if (i <= 127) noteSeq[2][i - 96] = EEPROM.read(eepromaddress(i, number));   // load Seq.3 array
-          else if (i <= 159) noteSeq[3][i - 128] = EEPROM.read(eepromaddress(i, number));  // load Seq.4 array
+        for (uint8_t i = 0; i < numberSequences; i++) {
+          songPattern[i] = EEPROM.read(eepromaddress(i + 24, number));  // load SongPattern array
+          for (uint8_t j = 0; j < seqLength; j++) {
+            noteSeq[i][j] = EEPROM.read(eepromaddress(j + (32 * (i + 1)), number));  // load Seq.1 array
+          }
         }
 
         SetBPM(BPM);
@@ -2566,7 +2484,7 @@ void DebounceButtons() {  // debounce buttons
   static bool lastblueReading = false;
 
   static unsigned long lastDebounceTime = 0;
-  static const uint8_t debounceDelay = 10;
+  const uint8_t debounceDelay = 10;  // time in ms
 
   bool greenReading = !digitalRead(greenbutton);
   bool yellowReading = !digitalRead(yellowbutton);
@@ -2610,10 +2528,24 @@ void ButtonsCommands(bool anypressed) {  // manage buttons's commands
   static bool greenispressed = false;   // is greenbutton still pressed?
   static bool blueispressed = false;    // is bluebutton still pressed?
 
+  static uint8_t redtristate = 1;
+  static uint8_t yellowtristate = 1;
+  static uint8_t bluetristate = 1;
+
   bool newredstate = false;     // reset redstate snapshot
   bool newyellowstate = false;  // reset yellowstate snapshot
   bool newgreenstate = false;   // reset bluestate snapshot
   bool newbluestate = false;    // reset greenstate snapshot
+
+  bool redandblue = false;
+  bool redandyellow = false;
+  bool yellowandgreen = false;
+  bool greenandblue = false;
+
+  if (redstate && bluestate) redandblue = true;
+  if (redstate && yellowstate) redandyellow = true;
+  if (yellowstate && greenstate) yellowandgreen = true;
+  if (greenstate && bluestate) greenandblue = true;
 
   if (!redispressed) newredstate = redstate;           // take a redstate snapshot
   if (!yellowispressed) newyellowstate = yellowstate;  // take a yellowstate snapshot
@@ -2622,7 +2554,10 @@ void ButtonsCommands(bool anypressed) {  // manage buttons's commands
 
   StartScreenTimer = true;  // if any button is pressed or released, start the screen timer
 
+  if (!redtristate) redtristate = 1;
+  if (!yellowtristate) yellowtristate = 1;
   if (!greentristate) greentristate = 1;  // set greentristate to null
+  if (!bluetristate) bluetristate = 1;
 
   if (menunumber == 0) {  // main screen - menu 0
 
@@ -2631,8 +2566,24 @@ void ButtonsCommands(bool anypressed) {  // manage buttons's commands
       StartMenuTimer = true;
     }
 
+    if (newredstate) redtristate = 2;
+    if (newyellowstate) yellowtristate = 2;
+    if (newbluestate) bluetristate = 2;
+
+    if (redtristate == 2 && !newredstate) {
+      redtristate = 0;
+    }
+
+    if (yellowtristate == 2 && !newyellowstate) {
+      yellowtristate = 0;
+    }
+
     if (greentristate == 2 && !newgreenstate) {
       greentristate = 0;
+    }
+
+    if (bluetristate == 2 && !newbluestate) {
+      bluetristate = 0;
     }
 
     if (modeselect != 3) {  // not live mode
@@ -2716,17 +2667,44 @@ void ButtonsCommands(bool anypressed) {  // manage buttons's commands
 
     else {  // live mode
 
-      if (newredstate || newyellowstate || newbluestate || !greentristate) {
+      if (redstate && bluestate) {
+        redandblue = true;
+        redtristate = 1;
+        bluetristate = 1;
+      }
 
-        if (newredstate) newcurrentSeq = 0;
-        else if (newyellowstate) newcurrentSeq = 1;
-        else if (newbluestate) newcurrentSeq = 2;
+      if (redstate && yellowstate) {
+        redandyellow = true;
+        redtristate = 1;
+        yellowtristate = 1;
+      }
+
+      if (yellowstate && greenstate) {
+        yellowandgreen = true;
+        yellowtristate = 1;
+        greentristate = 1;
+      }
+
+      if (greenstate && bluestate) {
+        greenandblue = true;
+        greentristate = 1;
+        bluetristate = 1;
+      }
+
+      if (!redtristate || !yellowtristate || !greentristate || !bluetristate || redandblue || redandyellow || yellowandgreen || greenandblue) {
+
+        if (!redtristate) newcurrentSeq = 0;
+        else if (!yellowtristate) newcurrentSeq = 1;
+        else if (!bluetristate) newcurrentSeq = 2;
         else if (!greentristate) newcurrentSeq = 3;
+        else if (redandyellow) newcurrentSeq = 4;
+        else if (greenandblue) newcurrentSeq = 5;
+        else if (redandblue) newcurrentSeq = 6;
+        else if (yellowandgreen) newcurrentSeq = 7;
 
         if (!playing) {
           currentSeq = newcurrentSeq;
           StartAndStop();
-          // muted = false;
         } else {
           TrigMute = true;
           if (muted) {
@@ -2855,13 +2833,14 @@ void ButtonsCommands(bool anypressed) {  // manage buttons's commands
           }
         }
         savepage = (savecurX / 6);
-        full = (checkSlot(savecurX));
+        full = (EEPROM.read(eepromaddress(16, savecurX)));
       }
 
       if (anypressed) PrintLoadSaveMenu(savemode);
 
       if (newgreenstate) {
         confirmation = true;
+        drumModeSelect = false;
         PrintPopup();
         newgreenstate = false;
       }
