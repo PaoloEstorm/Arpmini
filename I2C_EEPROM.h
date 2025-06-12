@@ -10,7 +10,7 @@ public:
     I2C_begin(addr);
     I2C_write(data);  // Data byte
     I2C_stop();
-    delay(4);
+    delayMicroseconds(4000);
   }
 
   uint8_t read(uint16_t addr) {
@@ -23,6 +23,29 @@ public:
     return data;
   }
 
+  void writepage(uint16_t address, uint8_t* data, uint8_t length) {
+
+    while (length > 0) {
+      uint8_t pageOffset = address % 64;   // Offset inside current EEPROM page
+      uint8_t chunk = 64 - pageOffset;     // Bytes left in the page
+      if (chunk > length) chunk = length;  // Limit to remaining data
+
+      I2C_begin(address);
+
+      // Write chunk of bytes
+      for (uint8_t i = 0; i < chunk; i++) {
+        I2C_write(data[i]);
+      }
+
+      I2C_stop();
+      delayMicroseconds(4000);
+
+      address += chunk;
+      data += chunk;
+      length -= chunk;
+    }
+  }
+
   void update(uint16_t address, uint8_t data) {
 
     if (data != read(address)) {
@@ -32,9 +55,10 @@ public:
 
   void init() {
 
-    DDRF |= (1 << 7);  // pin 18 as OUTPUT
-    TWBR = 72;         // Sets I2C speed to 100kHz
-    TWSR = 0;          // Sets prescaler to 1 (TWPS = 00) and clears status bits
+    DDRF |= (1 << PF7);   // pin 18 as OUTPUT
+    PORTF |= (1 << PF7);  // pin 18 high
+    TWBR = 72;            // Sets I2C speed to 100kHz
+    TWSR = 0;             // Sets prescaler to 1 (TWPS = 00) and clears status bits
   }
 
 private:
@@ -51,7 +75,7 @@ private:
   void I2C_enable() {
 
     busy = true;
-    PORTF |= (1 << 7);                   // pin 18 high
+    PORTF |= (1 << PF7);                 // pin 18 high
     DDRD &= ~((1 << PD1) | (1 << PD0));  // Set PD1 (SDA) and PD0 (SCL) as input
     PORTD |= (1 << PD1) | (1 << PD0);    // Enable internal pull-up resistors on PD1 and PD0
   }
@@ -72,7 +96,7 @@ private:
     TWCR &= ~(_BV(TWEN) | _BV(TWIE) | _BV(TWEA));  // disable I2C
     PORTD &= ~((1 << PD1) | (1 << PD0));           // set SDA and SCL pin to LOW
     DDRD |= (1 << PD1) | (1 << PD0);               // SDA and SCL pin as outputs
-    PORTF &= ~(1 << 7);                            // pin 18 low
+    PORTF &= ~(1 << PF7);                          // pin 18 LOW
     busy = false;
   }
 
