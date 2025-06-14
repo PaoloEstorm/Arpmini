@@ -2,9 +2,9 @@
  *  @file       Arpmini_plus.ino
  *  Project     Estorm - Arpmini+
  *  @brief      MIDI Sequencer & Arpeggiator
- *  @version    2.20
+ *  @version    2.21
  *  @author     Paolo Estorm
- *  @date       09/12/24
+ *  @date       06/14/25
  *  @license    GPL v3.0 
  *
  *  This program is free software: you can redistribute it and/or modify
@@ -25,7 +25,7 @@
 // https://brendanclarke.com/wp/2014/04/23/arduino-based-midi-sequencer/
 
 // system
-const char version[] PROGMEM = "2.20";
+const char version[] PROGMEM = "2.21";
 #include "Vocabulary.h"
 #include "Random8.h"
 Random8 Random;
@@ -63,8 +63,8 @@ I2C_EEPROM EEPROM;
 
 // midi
 #include <MIDI.h>
-#include <SoftwareSerial.h>
-SoftwareSerial Serial2(10, -1);                        // midi2 pins (input, output)
+#include "SoftwareSerial.h"
+SoftwareSerial Serial2(10);                            // midi2 pin (input)
 MIDI_CREATE_INSTANCE(HardwareSerial, Serial1, MIDI);   // initialize midi1
 MIDI_CREATE_INSTANCE(SoftwareSerial, Serial2, MIDI2);  // initialize midi2
 uint8_t midiChannel = 1;                               // MIDI channel to use for sequencer 1 to 16
@@ -165,7 +165,7 @@ bool nopattern = false;                          // inhibit current pattern from
 // notes
 int8_t pitch = 0;                // pitch transposition: -12 to +12
 bool pitchmode = false;          // 0=before scale, 1=scale root
-uint8_t scale = 0;               // 0=linear, 1=penta. major, 2=penta. minor, 3=major, 4=minor, 5=arabic, 6=locrian, 7=lydian, 8=dorian, 9=inverted, 10=hexa.
+uint8_t scale = 0;               // 0=linear, 1=penta.major, 2=penta.minor, 3=major, 4=minor, 5=harmonic minor, 6=locrian, 7=lydian, 8=dorian, 9=phrygian, 10=inverted, 11=hexatonal
 int8_t posttranspose = 0;        // post-scale pitch transposition: -12 to +12
 uint8_t noteLengthSelect = 3;    // set the notelength, 0=random, 1=20%, 2=40%, 3=60%, 4=80%, 5=100%, 6=120%
 bool sortnotes = true;           // sort the ActiveNotes array?
@@ -208,7 +208,7 @@ void setup() {  // initialization setup
   // oled screen initialization
   oled.init();
   oled.clear();
-  oled.setScale(3);
+  oled.setSize(3);
 
   // initialize timer1 used for internal clock
   noInterrupts();
@@ -273,7 +273,7 @@ void setup() {  // initialization setup
   Bip(2);  // Startup Sound
   oled.setCursorXY(2, 0);
   oled.println(F("ARPMINI\n\r   +"));
-  oled.setScale(1);
+  oled.setSize(1);
   oled.setCursorXY(25, 56);
   oled.print(F("FIRMWARE "));
   oled.printF(version);
@@ -474,13 +474,13 @@ void ScreenBlink() {  // blinks screen
 
 void PrintTitle() {  // title's printing setup
 
-  oled.setScale(2);
+  oled.setSize(2);
   oled.invertText(1);
 }
 
 void PrintBottomText() {  // bottom small text printing setup
 
-  oled.setScale(2);
+  oled.setSize(2);
   oled.setCursorXY(0, 48);
 }
 
@@ -923,8 +923,8 @@ void HandleCC(uint8_t channel, uint8_t cc, uint8_t value) {  // handle midi CC m
     else if (cc == 64) {  // sustain pedal cc
       sustain = value;
       if (!playing || (playing && trigMode == 0)) MIDI.sendControlChange(cc, value, channel);  // pass through sustain pedal cc
-    } else MIDI.sendControlChange(cc, value, channel); // pass through every other cc
-  } else MIDI.sendControlChange(cc, value, channel); // pass through if different channel cc
+    } else MIDI.sendControlChange(cc, value, channel);                                         // pass through every other cc
+  } else MIDI.sendControlChange(cc, value, channel);                                           // pass through if different channel cc
 }
 
 void HandleNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle a noteOn event
@@ -968,6 +968,7 @@ void HandleNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle 
 
       if (modeselect < 2 && trigMode > 0) {  // not song & live mode
         muted = false;
+        arpcount = 0;
         if (trigMode == 2 && numNotesHeld == 1) {  // trigmode 2 retrig start sequence
           Startposition();
           if (internalClock && sendrealtime) {
@@ -1082,19 +1083,20 @@ void SortArray() {  // sort activeNotes array
 
 int SetScale(int note, uint8_t scale) {  // adapt note to fit in to a music scale
 
-  static const int8_t scaleOffsets[][12] PROGMEM = {
+  static const int8_t scaleOffsets[][13] PROGMEM = {
     { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },             // Scale 0: Linear
     { 0, -1, -2, -1, -2, -1, -2, -3, -1, -2, -1, -2 },  // Scale 1: Pentatonic Major
     { 0, -1, -2, 0, -1, 0, -1, 0, -1, -2, 0, -1 },      // Scale 2: Pentatonic Minor
     { 0, -1, 0, -1, 0, 0, -1, 0, -1, 0, -1, 0 },        // Scale 3: Major
     { 0, -1, 0, 0, -1, 0, -1, 0, 0, -1, 0, -1 },        // Scale 4: Minor
-    { 0, -1, 0, 0, -1, 0, -1, 0, 0, -1, +1, 0 },        // Scale 5: Arabic
+    { 0, -1, 0, 0, -1, 0, -1, 0, 0, -1, +1, 0 },        // Scale 5: Harmonic Minor
     { 0, -1, -2, 0, -1, 0, 0, 0, -1, -2, 0, -1 },       // Scale 6: Blues
     { 0, 0, -1, 0, -1, 0, 0, -1, 0, -1, 0, -1 },        // Scale 7: Locrian
     { 0, -1, 0, -1, 0, -1, 0, 0, -1, 0, -1, 0 },        // Scale 8: Lydian
     { 0, -1, 0, 0, -1, 0, -1, 0, -1, 0, 0, -1 },        // Scale 9: Dorian
-    { 11, 9, 7, 5, 3, 1, -1, -3, -5, -7, -9, -11 },     // Scale 10: Inverted
-    { 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1 }        // Scale 11: Hexatonal
+    { 0, 0, -1, 0, 0, 0, -1, 0, 0, -1, 0, -1 },         // Scale 10: Phrigian
+    { 11, 9, 7, 5, 3, 1, -1, -3, -5, -7, -9, -11 },     // Scale 11: Inverted
+    { 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1 }        // Scale 12: Hexatonal
   };
 
   uint8_t reminder = note % 12;
@@ -1276,7 +1278,7 @@ void SetArpStyle(uint8_t style) {  // arpeggiator algorithms
       break;
   }
 
-  if (arprepeat < 1) arpcount = 1;
+  if (arpcount < 1) arpcount = 1;
 }
 
 void ClearSeqPatternArray() {  // clear all pattern and sequences arrays
@@ -1306,7 +1308,7 @@ void PrintMainScreen() {  // print menu 0 to the screen
   oled.invertText(0);
 
   if (modeselect == 0) {  // arp mode screen
-    oled.setScale(3);
+    oled.setSize(3);
 
     if (arpstyle == 0) oled.setCursorXY(48, 19);
     else if (arpstyle == 1) oled.setCursorXY(28, 19);
@@ -1314,7 +1316,7 @@ void PrintMainScreen() {  // print menu 0 to the screen
     else oled.setCursorXY(2, 19);
 
     oled.printF(arpmodes[arpstyle]);
-    oled.setScale(2);
+    oled.setSize(2);
   }
 
   else if (modeselect == 1) {  // rec mode screen
@@ -1349,13 +1351,13 @@ void PrintMainScreen() {  // print menu 0 to the screen
 
 void PrintBPMBar() {  // print BPM status bar to the screen
 
-  oled.setScale(2);
+  oled.setSize(2);
   oled.clear(0, 54, 127, 63);
 
   if ((internalClock && BPM > 99) || (!internalClock)) {
     oled.setCursorXY(4, 48);
   } else oled.setCursorXY(11, 48);
-  
+
   if (internalClock) oled.print(BPM);
   else oled.printF(ext);
   oled.shiftX();
@@ -1417,7 +1419,7 @@ void PrintMenu(uint8_t item) {  // print main menu - menu 1
   menunumber = 1;
 
   oled.clear();
-  oled.setScale(3);
+  oled.setSize(3);
   oled.printF(printnext);
 
   switch (item) {
@@ -1553,7 +1555,7 @@ void SubmenuSettings(uint8_t item, uint8_t dir) {  // print & handles changing s
   menunumber = 2;
 
   oled.clear();
-  oled.setScale(3);
+  oled.setSize(3);
 
   if (item == 0) oled.printF(printnext);
   else if ((item != 6 && item != 3 && item != 18) || (item == 3 && !drumMode)) oled.printF(printback);
@@ -1668,7 +1670,7 @@ void SubmenuSettings(uint8_t item, uint8_t dir) {  // print & handles changing s
 
         //-----SCREEN COMMANDS----//
         oled.printlnF(chain);
-        oled.setScale(2);
+        oled.setSize(2);
         PrintPatternSequence();
         oled.setCursorXY((curpos * 16), 48);
         oled.printF(upcursor);
@@ -1758,7 +1760,7 @@ void SubmenuSettings(uint8_t item, uint8_t dir) {  // print & handles changing s
         if (keyEnable) {
           if (!greenstate) {
             if (dir == goDown) {
-              if (scale < 11) scale++;
+              if (scale < 12) scale++;
             } else {
               if (scale > 0) scale--;
             }
@@ -1801,7 +1803,7 @@ void SubmenuSettings(uint8_t item, uint8_t dir) {  // print & handles changing s
         //-----SCREEN COMMANDS----//
         oled.print(F("NO."));
         oled.print(DrumNotes[curpos]);
-        oled.setScale(2);
+        oled.setSize(2);
         for (uint8_t i = 0; i < drumSlots; i++) {
           oled.setCursorXY(i * 16, 30);
           char letter = 'A' + i;
@@ -2206,12 +2208,12 @@ void PrintLoadSaveMenu(uint8_t mode) {  // print load-save menu - menu 3
     else if (mode == 2) {  // new song
 
       oled.print(F("SONG "));
-      oled.clear(0, 32, 127, 48);
+      oled.clear(0, 32, 127, 63);
       oled.invertText(0);
       oled.setCursorXY(5, 16);
       oled.printF(seq);
       oled.printF(length);
-      oled.setScale(3);
+      oled.setSize(3);
       if (NewSeqLength > 9) oled.setCursorXY(45, 32);
       else oled.setCursorXY(56, 32);
       oled.print(NewSeqLength);
@@ -2255,7 +2257,7 @@ void PrintLoadSaveMenu(uint8_t mode) {  // print load-save menu - menu 3
 
 void PrintPopup() {  // print popups - menu 4
 
-  oled.setScale(2);
+  oled.setSize(2);
   if (!editorPopup) oled.invertText(1);
   oled.setCursorXY(28, 32);
 
@@ -2267,8 +2269,13 @@ void PrintPopup() {  // print popups - menu 4
     }
 
     else if (savemode == 2) {  // new
-      if (!drumModeSelect) oled.print(F(" SONG?"));
-      else oled.print(F(" BEAT?"));
+      if (!drumModeSelect) oled.printF(printnext);
+      else oled.printF(space);
+      oled.print(F("SONG?"));
+      oled.setCursorXY(28, 48);
+      if (drumModeSelect) oled.printF(printnext);
+      else oled.printF(space);
+      oled.print(F("BEAT?"));
     }
 
     else if (savemode == 3) {  // save
@@ -2304,7 +2311,7 @@ void PrintBeatEditor() {  // print beat editor - menu 5
   menunumber = 5;
 
   oled.setCursorXY(0, 0);
-  oled.setScale(2);
+  oled.setSize(2);
   if (!row && !colum) oled.print(F("<SEQ"));
   else oled.print(F(">SEQ"));
   oled.print(currentSeqEdit + 1);
@@ -2645,7 +2652,7 @@ void ButtonsCommands(bool anypressed) {  // manage buttons's commands
 
         if (!blueispressed && newredstate) {  // start/stop recording
 
-          if ((modeselect == 2 && !playing) || (modeselect == 0)) {
+          if ((modeselect == 2 && !playing && !lockpattern) || (modeselect == 0)) {
             if (!recording) {
               PrintPopup();
             } else {
