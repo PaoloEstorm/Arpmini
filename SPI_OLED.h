@@ -106,7 +106,7 @@ public:
     setWindowShift(x, y);
   }
 
-  void setScale(uint8_t scale) {
+  void setSize(uint8_t scale) {
 
     _scaleX = scale;
     _scaleY = scale * 8;
