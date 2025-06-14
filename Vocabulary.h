@@ -54,8 +54,8 @@ const char noteNames[][3] PROGMEM = {
 
 const char scaleNames[][8] PROGMEM = {
   "LINEAR", "PENTMAJ", "PENTMIN", "MAJOR", "MINOR",
-  "ARABIC", "BLUES", "LOCRIAN", "LYDIAN", "DORIAN",
-  "INVERSE", "HEXATON"
+  "HARMMIN", "BLUES", "LOCRIAN", "LYDIAN", "DORIAN",
+  "PHRYGIA", "INVERSE", "HEXATON"
 };
 
 const char savemodes[][7] PROGMEM = {
