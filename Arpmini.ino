@@ -1,8 +1,8 @@
 /*!
- *  @file       Arpmini_plus.ino
- *  Project     Estorm - Arpmini+
+ *  @file       Arpmini.ino
+ *  Project     Estorm - Arpmini
  *  @brief      MIDI Sequencer & Arpeggiator
- *  @version    2.21
+ *  @version    2.22
  *  @author     Paolo Estorm
  *  @date       06/14/25
  *  @license    GPL v3.0 
@@ -25,12 +25,13 @@
 // https://brendanclarke.com/wp/2014/04/23/arduino-based-midi-sequencer/
 
 // system
-const char version[] PROGMEM = "2.21";
+const char version[] PROGMEM = "2.22";
 #include "Vocabulary.h"
 #include "Random8.h"
 Random8 Random;
 #define bitToggle8(value, bit) ((value) ^= (1 << (bit)))  // flip bit (8 bit version)
 #define bitSet8(value, bit) ((value) |= (1 << (bit)))     // set bit high (8 bit version)
+#include <avr/wdt.h>
 
 // LEDs
 #define yellowLED 2  // yellow LED pin
@@ -57,9 +58,9 @@ SPI_OLED oled;                 // screen initialization
 bool StartScreenTimer = true;  // activate the screen-on timer
 
 // memory
-#define memorySlots 60
-#include "I2C_EEPROM.h"
-I2C_EEPROM EEPROM;
+#define memorySlots 60   // max number of songs (absolute max is 117)
+#include "I2C_EEPROM.h"  // external eeprom for songs
+I2C_EEPROM EEPROM2;
 
 // midi
 #include <MIDI.h>
@@ -107,7 +108,7 @@ bool cloneCur = false;       // cursor position in the clone seq submenu
 // time keeping
 uint8_t clockTimeout;              // variable for keeping track of external/internal clock
 bool internalClock = true;         // is the sequencer using the internal clock?
-uint8_t StepSpeed = 1;             // 0=2x, 1=1x, 2=3/4, 3=1/2
+uint8_t StepSpeed = 2;             // 0=1/32, 1=1/24, 2=1/16, 3=1/12, 4=1/8, 5=1/6, 6=1/4
 bool FixSync = false;              // tries to re-allign the sequence when changing step-speeds
 bool flipflopEnable;               // part of the frameperstep flipflop
 uint8_t sendrealtime = 1;          // send midi realtime messages. 0=off, 1=on (@internalclock, only if playing), 2=on (@internalclock, always)
@@ -203,12 +204,14 @@ void setup() {  // initialization setup
 
   DDRD &= ~(1 << PD5);  // disable LED_BUILTIN_TX (on-board LED) (set as input)
 
-  EEPROM.init();
+  EEPROM2.init();
 
   // oled screen initialization
   oled.init();
   oled.clear();
   oled.setSize(3);
+
+  Serial.begin(115200);  // start serial USB at 115200 baud
 
   // initialize timer1 used for internal clock
   noInterrupts();
@@ -246,18 +249,19 @@ void setup() {  // initialization setup
   DDRF |= (1 << PF4);    // set pin 21 (A3) as output
   PORTF &= ~(1 << PF4);  // set pin 21 (A3) LOW
 
-  if (!(digitalRead(yellowbutton) && digitalRead(bluebutton))) ResetEEPROM();  // yellowbutton + bluebutton, initialize the EEPROM with default values
+  // yellowbutton + bluebutton or first installation initialize the EEPROM with default values
+  if ((!(digitalRead(yellowbutton) && digitalRead(bluebutton))) || (EEPROM2.read(16) != 65)) ResetEEPROM();
 
   // load default settings from EEPROM
-  midiChannel = EEPROM.read(0);
-  sendrealtime = EEPROM.read(1);
-  soundmode = EEPROM.read(2);
-  syncport = EEPROM.read(3);
+  midiChannel = EEPROM2.read(0);
+  sendrealtime = EEPROM2.read(1);
+  soundmode = EEPROM2.read(2);
+  syncport = EEPROM2.read(3);
 
   for (uint8_t i = 0; i < 8; i++) {
-    if (i < 4) buttonCC[i] = EEPROM.read(4 + i);  // read from eeprom cc-mapping
-    DrumNotes[i] = EEPROM.read(8 + i);            // initialize the drum notes from eeprom
-    BPMbuffer[i] = BPM;                           // initialize the tap tempo array
+    if (i < 4) buttonCC[i] = EEPROM2.read(4 + i);  // read from eeprom cc-mapping
+    DrumNotes[i] = EEPROM2.read(8 + i);            // initialize the drum notes from eeprom
+    BPMbuffer[i] = BPM;                            // initialize the tap tempo array
   }
 
   AllLedsOff();
@@ -270,26 +274,33 @@ void setup() {  // initialization setup
   SynthReset();
   Startposition();
 
-  Bip(2);  // Startup Sound
-  oled.setCursorXY(2, 0);
-  oled.println(F("ARPMINI\n\r   +"));
+  for (uint8_t i = 0; i <= 24; i++) {
+    oled.setCursorXY(2, i);
+    oled.print(F("ARPMINI"));
+    delayMicroseconds(12500);
+  }
+
+  oled.setCursorXY(10, 0);
+  oled.print(F(":STORM"));
+
   oled.setSize(1);
   oled.setCursorXY(25, 56);
   oled.print(F("FIRMWARE "));
   oled.printF(version);
-
+  Bip(2);  // Startup Sound
   delay(2000);
   PrintMainScreen();
 }
 
 void safedigitalWrite(uint8_t pin, bool state) {  // avoid digitalwrite and i2c at the same time (external eeprom)
 
-  if (!EEPROM.busy) digitalWrite(pin, state);
+  if (!EEPROM2.busy) digitalWrite(pin, state);
 }
 
 void SystemReset() {  // restart system
 
-  asm volatile(" jmp 0");
+  wdt_enable(WDTO_15MS);
+  while (1) {}  // Wait reset
 }
 
 ISR(TIMER1_COMPA_vect) {  // hardware timer for internal clock
@@ -315,6 +326,10 @@ void loop() {  // run continuously
     stepEnable = false;
     HandleInternalClock();
   }
+
+  if (Serial.available()) {
+    PcSync(Serial.read());
+  }
 }
 
 void ResetEEPROM() {  // initialize the EEPROM with default values
@@ -322,22 +337,92 @@ void ResetEEPROM() {  // initialize the EEPROM with default values
   for (uint8_t i = 0; i < memorySlots; i++) {
 
     if (i < 4) {
-      EEPROM.update(i, 1);           // midiChannel, sendrealtime, soundmode, syncport
-      EEPROM.update(4 + i, i + 30);  // buttons cc
+      EEPROM2.update(i, 1);           // midiChannel, sendrealtime, soundmode, syncport
+      EEPROM2.update(4 + i, i + 30);  // buttons cc
     }
 
-    EEPROM.update(eepromaddress(16, i), 0);  // songs addresses
+    EEPROM2.update(eepromaddress(32, i), 0);  // songs addresses
   }
 
   for (uint8_t i = 0; i < drumSlots; i++) {
-    EEPROM.update(8 + i, i + 48);
+    EEPROM2.update(8 + i, i + 48);
   }
+
+  EEPROM2.update(16, 65);  // write check
 }
 
-unsigned int eepromaddress(unsigned int address, uint8_t slot) {  // calculate eeprom addresses (address, slot number 0-5)
+unsigned int eepromaddress(unsigned int address, uint8_t slot) {  // calculate eeprom song addresses
 
   uint16_t slotsize = (numberSequences * maxSeqLength) + 16;
   return (slotsize * slot) + address;
+}
+
+void PcSync(uint8_t data) {  // exchange data with PC
+
+  static uint8_t enable = 0;  // 0=none, 1=recieved command, 2=recieved address
+  static uint8_t mode = 0;
+  static uint8_t slot = 0;
+  bool stop = false;
+  static int writeIndex = 32;
+
+  const int SIZE_SLOT = 303;
+  const uint8_t CMD_CHECK_SLOT = 0xfc;
+  const uint8_t CMD_READ_SLOT = 0xfd;
+  const uint8_t CMD_WRITE_SLOT = 0xfe;
+  const uint8_t CMD_STOP = 0xff;
+
+  if (enable == 0) {  // select mode
+    if (data >= CMD_CHECK_SLOT && data < CMD_STOP) {
+      enable = 1;
+      mode = data;
+      return;
+    } else stop = true;
+  }
+
+  else if (enable == 1) {  // select slot
+    if (data > 0 && data <= memorySlots) {
+      slot = data;
+      enable = 2;
+      if (mode == CMD_WRITE_SLOT) return;
+    } else stop = true;
+  }
+
+  if (enable == 2) {  // check/read/write
+
+    if (mode == CMD_CHECK_SLOT) {  // check slot
+      Serial.write(EEPROM2.read(eepromaddress(32, slot - 1)));
+      Serial.write(CMD_CHECK_SLOT);  // check confirmation
+      enable = false;
+    }
+
+    else if (mode == CMD_READ_SLOT) {  // read entire slot
+      for (int i = 32; i <= SIZE_SLOT; i++) {
+        uint8_t _data = EEPROM2.read(eepromaddress(i, slot - 1));
+        if (_data != 0xff) Serial.write(_data);
+        else Serial.write((uint8_t)0x00);
+      }
+      Serial.write(CMD_STOP);  // read confirmation
+      enable = false;
+    }
+
+    else if (mode == CMD_WRITE_SLOT) {  // write
+      if (data != 0xff) {
+        EEPROM2.update((eepromaddress(writeIndex, slot - 1)), data);
+        Serial.write(CMD_WRITE_SLOT);  // write confirmation
+        if (writeIndex < SIZE_SLOT) writeIndex++;
+        else stop = true;
+      } else stop = true;
+    }
+  }
+
+  if (stop) {  // stop and reset
+    stop = false;
+    enable = false;
+    mode = 0;
+    slot = 0;
+    writeIndex = 32;
+    Serial.write(CMD_STOP);  // stop confirmation
+  }
 }
 
 void AllLedsOn() {  // turn on all LEDs
@@ -509,9 +594,9 @@ void TapTempo() {  // calculate tempo based on the tapping frequency
   unsigned long currentTapTime = millis();
   unsigned long tapInterval = currentTapTime - lastTapTime;
 
-  if (tapInterval < 1500 && tapInterval > 240) {  // if the time between taps is not too long or too short
+  if (tapInterval < 1500 && tapInterval > 240) {  // if the time between taps is not too long or too short (40-250bpm)
 
-    BPMbuffer[bufferIndex] = 60250 / tapInterval;  // store iteration
+    BPMbuffer[bufferIndex] = 60200 / tapInterval;  // store iteration
     bufferIndex = (bufferIndex + 1) % iterations;  // go to the next slot
 
     unsigned int BPMsum = 0;  // sum all iterations
@@ -519,10 +604,13 @@ void TapTempo() {  // calculate tempo based on the tapping frequency
       BPMsum += BPMbuffer[i];
     }
 
-    BPM = BPMsum / iterations;  // calculate averege
-    SetBPM(BPM);
-    SubmenuSettings(menuitem, 0);
-  }
+    if ((bufferIndex % 2) == 0) {
+      BPM = BPMsum / iterations;  // calculate averege
+      SetBPM(BPM);
+      SubmenuSettings(menuitem, 0);
+    }
+
+  } else bufferIndex = 0;
 
   lastTapTime = currentTapTime;  // store last interval
 }
@@ -587,10 +675,10 @@ void RunClock() {  // main clock
 
 void SetTicksPerStep() {  // set ticksPerStep values
 
-  static const uint8_t flipSwing[] = { 4, 8, 8, 16 };
-  static const uint8_t noSwingValues[] = { 3, 6, 8, 12 };
-  static const uint8_t flopSwing[] = { 2, 4, 8, 8 };
-  static const uint8_t globalDiv[] = { 8, 4, 3, 2 };
+  static const uint8_t noSwingValues[] = { 3, 4, 6, 8, 12, 16, 24 };
+  static const uint8_t flipSwing[] = { 4, 4, 8, 8, 16, 16, 32 };
+  static const uint8_t flopSwing[] = { 2, 4, 4, 8, 8, 16, 16 };
+  static const uint8_t globalDiv[] = { 8, 6, 4, 3, 2, 3, 2 };
 
   if (swing) {
     flip = flipSwing[StepSpeed];
@@ -617,17 +705,22 @@ uint8_t SetNoteLength() {  // set the note duration
   static const uint8_t noteLengths[] = { 55, 35, 30, 25, 20, 15 };  // noteLengths
 
   if (noteLengthSelect == 0) {  // random
-    noteLength = Random.get(15, 55);
+    noteLength = Random.get(10, 55);
   } else noteLength = noteLengths[noteLengthSelect - 1];
 
-  if (swing && StepSpeed != 2) {
-    if (flipflopEnable) noteLength = noteLength - 5;
+  if (swing && (StepSpeed % 2 == 0)) {
+    if (flipflopEnable) noteLength = noteLength - 4;
     else noteLength = noteLength + 10;
   }
 
-  if (StepSpeed == 0) noteLength = noteLength * 2;
-  else if (StepSpeed == 2) noteLength = noteLength - 5;
-  else if (StepSpeed == 3) noteLength = noteLength / 2;
+  if (StepSpeed == 0) noteLength = noteLength * 2;        // 1/32
+  else if (StepSpeed == 1) noteLength = noteLength + 10;  // 1/24
+  else if (StepSpeed == 3) noteLength = noteLength - 5;   // 1/12
+  else if (StepSpeed == 4) noteLength = noteLength / 2;   // 1/8
+  else if (StepSpeed == 5) noteLength = noteLength - 10;  // 1/6
+  else if (StepSpeed == 6) noteLength = noteLength / 4;   // 1/4
+
+  if (drumMode && noteLength < 20) noteLength = 20;
 
   return (noteLength);
 }
@@ -1094,7 +1187,7 @@ int SetScale(int note, uint8_t scale) {  // adapt note to fit in to a music scal
     { 0, 0, -1, 0, -1, 0, 0, -1, 0, -1, 0, -1 },        // Scale 7: Locrian
     { 0, -1, 0, -1, 0, -1, 0, 0, -1, 0, -1, 0 },        // Scale 8: Lydian
     { 0, -1, 0, 0, -1, 0, -1, 0, -1, 0, 0, -1 },        // Scale 9: Dorian
-    { 0, 0, -1, 0, 0, 0, -1, 0, 0, -1, 0, -1 },         // Scale 10: Phrigian
+    { 0, 0, -1, 0, 0, 0, -1, 0, 0, -1, 0, -1 },         // Scale 10: Phrygian
     { 11, 9, 7, 5, 3, 1, -1, -3, -5, -7, -9, -11 },     // Scale 11: Inverted
     { 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1 }        // Scale 12: Hexatonal
   };
@@ -1288,7 +1381,7 @@ void ClearSeqPatternArray() {  // clear all pattern and sequences arrays
     else songPattern[i] = (i - 3);
   }
 
-  for (uint8_t j = 0; j < numberSequences; j++) {  // clean Seq arrays
+  for (uint8_t j = 0; j < numberSequences; j++) {  // clean seq arrays
     for (uint8_t i = 0; i < maxSeqLength; i++) {
       noteSeq[j][i] = 0;
     }
@@ -1794,7 +1887,7 @@ void SubmenuSettings(uint8_t item, uint8_t dir) {  // print & handles changing s
             }
           } else {
             for (uint8_t i = 0; i < drumSlots; i++) {
-              EEPROM.update(8 + i, DrumNotes[i]);
+              EEPROM2.update(8 + i, DrumNotes[i]);
             }
             ScreenBlink();
           }
@@ -1919,8 +2012,7 @@ void SubmenuSettings(uint8_t item, uint8_t dir) {  // print & handles changing s
 
         //-----SCREEN COMMANDS----//
         oled.printlnF(steps);
-        if (arprepeat > 1) oled.printF(plus);
-        oled.print(arprepeat - 1);
+        oled.print(arprepeat);
         PrintBottomText();
         oled.print(F("DIST."));
         if (stepdistance > 0) oled.printF(plus);
@@ -1935,7 +2027,7 @@ void SubmenuSettings(uint8_t item, uint8_t dir) {  // print & handles changing s
         if (dir == goUp) {
           if (StepSpeed > 0) StepSpeed--;
         } else {
-          if (StepSpeed < 3) StepSpeed++;
+          if (StepSpeed < 6) StepSpeed++;
         }
         if (playing) FixSync = true;
       }
@@ -2046,7 +2138,7 @@ void SubmenuSettings(uint8_t item, uint8_t dir) {  // print & handles changing s
             if (midiChannel > 1) midiChannel--;
           }
         } else {
-          EEPROM.update(0, midiChannel);
+          EEPROM2.update(0, midiChannel);
           ScreenBlink();
         }
       }
@@ -2067,7 +2159,7 @@ void SubmenuSettings(uint8_t item, uint8_t dir) {  // print & handles changing s
             if (sendrealtime > 0) sendrealtime--;
           }
         } else {
-          EEPROM.update(1, sendrealtime);
+          EEPROM2.update(1, sendrealtime);
           ScreenBlink();
         }
       }
@@ -2089,7 +2181,7 @@ void SubmenuSettings(uint8_t item, uint8_t dir) {  // print & handles changing s
               if (syncport > 0) syncport--;
             }
           } else {
-            EEPROM.update(3, syncport);
+            EEPROM2.update(3, syncport);
             ScreenBlink();
           }
         }
@@ -2114,7 +2206,7 @@ void SubmenuSettings(uint8_t item, uint8_t dir) {  // print & handles changing s
           }
         } else {
           for (uint8_t i = 0; i < 4; i++) {
-            EEPROM.update(4 + i, buttonCC[i]);
+            EEPROM2.update(4 + i, buttonCC[i]);
           }
           ScreenBlink();
         }
@@ -2143,7 +2235,7 @@ void SubmenuSettings(uint8_t item, uint8_t dir) {  // print & handles changing s
             if (soundmode < 3) soundmode++;
           }
         } else {
-          EEPROM.update(2, soundmode);
+          EEPROM2.update(2, soundmode);
           ScreenBlink();
         }
         SetSound(soundmode);
@@ -2235,7 +2327,7 @@ void PrintLoadSaveMenu(uint8_t mode) {  // print load-save menu - menu 3
         if (i < 3) oled.setCursorXY(0, (i + 1) * 16);
         else oled.setCursorXY(65, (i - 2) * 16);
 
-        uint8_t drumsong = (EEPROM.read(eepromaddress(16, loc)));
+        uint8_t drumsong = (EEPROM2.read(eepromaddress(32, loc)));
 
         if (drumsong) {
           if (loc < 9) {
@@ -2271,11 +2363,11 @@ void PrintPopup() {  // print popups - menu 4
     else if (savemode == 2) {  // new
       if (!drumModeSelect) oled.printF(printnext);
       else oled.printF(space);
-      oled.print(F("SONG?"));
+      oled.print(F("SONG "));
       oled.setCursorXY(28, 48);
       if (drumModeSelect) oled.printF(printnext);
       else oled.printF(space);
-      oled.print(F("BEAT?"));
+      oled.print(F("BEAT "));
     }
 
     else if (savemode == 3) {  // save
@@ -2372,7 +2464,7 @@ void LoadSave(uint8_t mode, uint8_t number) {  // (bake/clone/new/save/load/dele
   else if (mode == 2) {  // new song
 
     playing = false;
-    StepSpeed = 1;
+    StepSpeed = 2;
     noteLengthSelect = 3;
     lockpattern = false;
     pattern = 0;
@@ -2393,19 +2485,26 @@ void LoadSave(uint8_t mode, uint8_t number) {  // (bake/clone/new/save/load/dele
   else {
 
     if (mode == 3) {  // save song
-      EEPROM.update((eepromaddress(16, number)), (drumMode + 1));
-      EEPROM.update((eepromaddress(17, number)), pitchmode);
-      EEPROM.update((eepromaddress(18, number)), (pitch + 12));
-      EEPROM.update((eepromaddress(19, number)), scale);
-      EEPROM.update((eepromaddress(20, number)), (posttranspose + 12));
-      EEPROM.update((eepromaddress(21, number)), seqLength);
-      EEPROM.update((eepromaddress(22, number)), BPM);
-      EEPROM.update((eepromaddress(23, number)), swing);
+      uint8_t slot1 = (pitchmode << 4) | (swing << 0);
+      EEPROM2.update((eepromaddress(32, number)), (drumMode + 1));
+      EEPROM2.update((eepromaddress(33, number)), slot1);
+      EEPROM2.update((eepromaddress(34, number)), (pitch + 12));
+      EEPROM2.update((eepromaddress(35, number)), scale);
+      EEPROM2.update((eepromaddress(36, number)), (posttranspose + 12));
+      EEPROM2.update((eepromaddress(37, number)), seqLength);
+      EEPROM2.update((eepromaddress(38, number)), BPM);
+      EEPROM2.update((eepromaddress(39, number)), StepSpeed);
+
+      // // much faster but uses more memory
+      // EEPROM2.writepage(eepromaddress(40, number), songPattern, numberSequences);
+      // for (uint8_t i = 0; i < numberSequences; i++) {
+      //   EEPROM2.writepage(eepromaddress(48 + (32 * i), number), noteSeq[i], seqLength);
+      // }
 
       for (uint8_t i = 0; i < numberSequences; i++) {
-        EEPROM.update((eepromaddress(i + 24, number)), songPattern[i]);  // save SongPattern array
+        EEPROM2.update((eepromaddress(i + 40, number)), songPattern[i]);  // save SongPattern array
         for (uint8_t j = 0; j < seqLength; j++) {
-          EEPROM.update((eepromaddress(j + (32 * (i + 1)), number)), noteSeq[i][j]);  // save all Seq. arrays
+          EEPROM2.update((eepromaddress(j + 48 + (32 * i), number)), noteSeq[i][j]);  // save all seq's array
         }
       }
 
@@ -2419,19 +2518,21 @@ void LoadSave(uint8_t mode, uint8_t number) {  // (bake/clone/new/save/load/dele
         pattern = 0;
         ClearSeqPatternArray();
 
-        drumMode = (EEPROM.read(eepromaddress(16, number)) - 1);
-        pitchmode = EEPROM.read(eepromaddress(17, number));
-        pitch = (EEPROM.read(eepromaddress(18, number)) - 12);
-        scale = EEPROM.read(eepromaddress(19, number));
-        posttranspose = (EEPROM.read(eepromaddress(20, number)) - 12);
-        seqLength = EEPROM.read(eepromaddress(21, number));
-        BPM = EEPROM.read(eepromaddress(22, number));
-        swing = EEPROM.read(eepromaddress(23, number));
+        drumMode = (EEPROM2.read(eepromaddress(32, number)) - 1);
+        uint8_t slot1 = EEPROM2.read(eepromaddress(33, number));
+        pitchmode = (slot1 >> 4) & 1;
+        swing = (slot1 >> 0) & 1;
+        pitch = (EEPROM2.read(eepromaddress(34, number)) - 12);
+        scale = EEPROM2.read(eepromaddress(35, number));
+        posttranspose = (EEPROM2.read(eepromaddress(36, number)) - 12);
+        seqLength = EEPROM2.read(eepromaddress(37, number));
+        BPM = EEPROM2.read(eepromaddress(38, number));
+        StepSpeed = EEPROM2.read(eepromaddress(39, number));
 
         for (uint8_t i = 0; i < numberSequences; i++) {
-          songPattern[i] = EEPROM.read(eepromaddress(i + 24, number));  // load SongPattern array
+          songPattern[i] = EEPROM2.read(eepromaddress(i + 40, number));  // load SongPattern array
           for (uint8_t j = 0; j < seqLength; j++) {
-            noteSeq[i][j] = EEPROM.read(eepromaddress(j + (32 * (i + 1)), number));  // load Seq.1 array
+            noteSeq[i][j] = EEPROM2.read(eepromaddress(j + 48 + (32 * i), number));  // load all seq's array
           }
         }
 
@@ -2446,7 +2547,7 @@ void LoadSave(uint8_t mode, uint8_t number) {  // (bake/clone/new/save/load/dele
 
     else {  // delete song
       if (full) {
-        EEPROM.update((eepromaddress(16, number)), 0);
+        EEPROM2.update((eepromaddress(32, number)), 0);
         ScreenBlink();
       } else confirmation = false;
     }
@@ -2457,14 +2558,14 @@ void LoadSave(uint8_t mode, uint8_t number) {  // (bake/clone/new/save/load/dele
 
 void BakeSequence() {  // normalize transpose & scale in to current seq / all seqs
 
-  if ((modeselect == 1) || (modeselect == 2 && lockpattern)) {  // bake current Seq array
+  if ((modeselect == 1) || (modeselect == 2 && lockpattern)) {  // bake current seq array
     for (uint8_t i = 0; i < maxSeqLength; i++) {
       if (noteSeq[currentSeq][i] > 0) noteSeq[currentSeq][i] = TransposeAndScale(noteSeq[currentSeq][i]);
     }
   }
 
   else {
-    for (uint8_t j = 0; j < numberSequences; j++) {  // bake all Seq arrays
+    for (uint8_t j = 0; j < numberSequences; j++) {  // bake all seq arrays
       for (uint8_t i = 0; i < maxSeqLength; i++) {
         if (noteSeq[j][i] > 0) noteSeq[j][i] = TransposeAndScale(noteSeq[j][i]);
       }
@@ -2840,7 +2941,7 @@ void ButtonsCommands(bool anypressed) {  // manage buttons's commands
           }
         }
         savepage = (savecurX / 6);
-        full = (EEPROM.read(eepromaddress(16, savecurX)));
+        full = (EEPROM2.read(eepromaddress(32, savecurX)));
       }
 
       if (anypressed) PrintLoadSaveMenu(savemode);
