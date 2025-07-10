@@ -6,7 +6,7 @@ You can connect multiple Arpminis together creating a larger and more complex sy
 
 ## Give that dusty old synth in your closet a fresh new life! Unlock a ton of advanced features and unleash your creativity with Arpmini
 
-![IMG_7545](https://github.com/user-attachments/assets/0898df72-a166-4744-bc27-c8b8d48c6f3d)
+![IMG_8034](https://github.com/user-attachments/assets/a7da8271-f115-4ae6-a1e0-6f077bf8540f)
 
 Its features include:
 
@@ -45,7 +45,7 @@ Selectable Scales
 
 Arpmini Modes
 
-![Modes](https://github.com/user-attachments/assets/ca2bec88-29bf-4b8d-bb55-1927422d3a1b)
+<img width="1985" height="1986" alt="Modes" src="https://github.com/user-attachments/assets/2d0461d1-6c39-44a0-93d7-e996d8ff35f7" />
 
     Arp Mode: Arpeggiates the played notes based on the selected arpeggio mode.
     Rec Mode: Records and plays back up to 8 patterns of variable length, with a maximum of 32 notes each.
@@ -54,7 +54,7 @@ Arpmini Modes
         
 ## Functionalities:
 
-Load/save/edit up to 60 songs (8 traks 32 steps max), clone sequence, live/while arpeggiating & by step recording, 7 arp styles - oredered or key-press order, record, edit and play polyphonic drum tracks (with piano roll), tempo from 20 to 250 BPM with tap-tempo, pre/post, by-root and by-keyboard traspositions, 12 music scales, bake (normalize) transpositions and scale,  random variations (range, probability and miss-note probability), up to 4 arp steps with adjustable distance, 4 arpeggiator/sequencer speeds, 3 trigger mode, swing, metronome with customizable time signature, midi channel selection, in/out sync options, external control by MIDI CC, UI sound settings, 
+Load/save/edit up to 60 songs (8 traks 32 steps max), clone sequence, live/while arpeggiating & by step recording, 7 arp styles - oredered or key-press order, record, edit and play polyphonic drum tracks (with piano roll), tempo from 20 to 250 BPM with tap-tempo, pre/post, by-root and by-keyboard traspositions, 12 music scales, bake (normalize) transpositions and scale, random variations (range, probability and miss-note probability), up to 4 arp steps with adjustable distance, 7 arpeggiator/sequencer speeds, 3 trigger mode, swing, metronome with customizable time signature, midi channel selection, in/out sync options, external control by MIDI CC, UI sound settings, 
 (I'm working on a detailed user manual)
 
 ![Wiring](https://github.com/user-attachments/assets/d4ef5a1f-47d1-4e6a-9500-db48eb0f6fc2)
