@@ -18,7 +18,7 @@ Two independent MIDI inputs protected by optocouplers
 
 Two MIDI outputs, which share the same signal to control multiple MIDI devices simultaneously
 
-Four backlit buttons, mappable and controllable via MIDI CC from an external MIDI controller, for enhanced versatility and remote control
+Four backlit buttons, mappable and controllable via MIDI CC from an external MIDI controller
 
 32KB of memory to store up to 60 songs and various global settings
 
