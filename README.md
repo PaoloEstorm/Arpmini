@@ -1,10 +1,10 @@
-# Arpmini+
+# Arpmini
 
-Arpmini+ is a miniature MIDI loopstation, offering advanced functionality as an arpeggiator, notes/drum sequencer and recorder, designed to control external MIDI instruments.
-At the core of Arpmini+ is an Arduino Pro Micro with an ATmega32u4 microcontroller.
+Arpmini is a miniature MIDI loopstation, offering advanced functionality as an arpeggiator, notes/drum sequencer and recorder, designed to control external MIDI instruments.
+At the core of Arpmini is an Arduino Pro Micro with an ATmega32u4 microcontroller.
 You can connect multiple Arpminis together creating a larger and more complex system for live performance or music production.
 
-## Give that dusty old synth in your closet a fresh new life! Unlock a ton of advanced features and unleash your creativity with Arpmini+
+## Give that dusty old synth in your closet a fresh new life! Unlock a ton of advanced features and unleash your creativity with Arpmini
 
 ![IMG_7545](https://github.com/user-attachments/assets/0898df72-a166-4744-bc27-c8b8d48c6f3d)
 
@@ -43,7 +43,7 @@ Selectable Scales
     Inverted scale
     Hexatonic scale
 
-Arpmini+ Modes
+Arpmini Modes
 
 ![Modes](https://github.com/user-attachments/assets/ca2bec88-29bf-4b8d-bb55-1927422d3a1b)
 
@@ -59,7 +59,7 @@ Load/save/edit up to 60 songs (8 traks 32 steps max), clone sequence, live/while
 
 ![Wiring](https://github.com/user-attachments/assets/d4ef5a1f-47d1-4e6a-9500-db48eb0f6fc2)
 
-A simulated demo of Arpmini+ can be explored on Wokwi via the link https://wokwi.com/projects/430279970010982401
+A simulated demo of Arpmini can be explored on Wokwi via the link https://wokwi.com/projects/430279970010982401
 
 ## Schematic and PCB design: https://oshwlab.com/estorm/miniseq
 
