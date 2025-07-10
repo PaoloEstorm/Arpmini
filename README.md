@@ -8,49 +8,55 @@ You can connect multiple Arpminis together creating a larger and more complex sy
 
 ![IMG_8034](https://github.com/user-attachments/assets/a7da8271-f115-4ae6-a1e0-6f077bf8540f)
 
-Its features include:
+## Its features include:
 
-    Simple and intuitive UI.
-    Packed with settings for total customization.
-    Two independent MIDI inputs protected by optocouplers.
-    Two MIDI outputs, which share the same signal to control multiple MIDI devices simultaneously.
-    Four backlit buttons, mappable and controllable via MIDI CC from an external MIDI controller, for enhanced versatility and remote control.
-    32KB of memory to store up to 60 songs and various global settings, marked with an asterisk in the menu.
-    Built-in speaker for acoustic feedback and metronome.
+Simple and intuitive UI
 
-Arpeggio Styles
+Packed with settings for total customization
 
-    Up: Notes played in ascending order
-    Down: Notes played in descending order
-    Up-Down: Notes played in ascending order, then descending
-    Down-Up: Notes played in descending order, then ascending
-    Up+Down: Alternating ascending-descending sequence
-    Down+Up: Alternating descending-ascending sequence
-    Random: Notes played in a random order
+Two independent MIDI inputs protected by optocouplers
 
-Selectable Scales
+Two MIDI outputs, which share the same signal to control multiple MIDI devices simultaneously
 
-    Major pentatonic scale
-    Minor pentatonic scale
-    Major scale
-    Minor scale
-    Harmonic Minor scale
-    Blues scale
-    Locrian scale
-    Lydian scale
-    Dorian scale
-    Phrygian scale
-    Inverted scale
-    Hexatonic scale
+Four backlit buttons, mappable and controllable via MIDI CC from an external MIDI controller, for enhanced versatility and remote control
 
-Arpmini Modes
+32KB of memory to store up to 60 songs and various global settings
+
+Import/export songs between Arpmini and your computer using [Arpmini Editor](https://github.com/PaoloEstorm/Arpmini-Editor)
+
+Built-in speaker for acoustic feedback and metronome and much more
+
+## Arpeggio Styles
+
+Up: Notes played in ascending order
+
+Down: Notes played in descending order
+
+Up-Down: Notes played in ascending order, then descending
+
+Down-Up: Notes played in descending order, then ascending
+
+Up+Down: Alternating ascending-descending sequence
+
+Down+Up: Alternating descending-ascending sequence
+
+Random: Notes played in a random order
+
+## Selectable Scales
+
+Major pentatonic, Minor pentatonic, Major, Minor, Harmonic Minor, Blues, Locrian, Lydian, Dorian, Phrygian, Inverted, Hexatonic
+
+## Arpmini Modes
 
 <img width="1985" height="1986" alt="Modes" src="https://github.com/user-attachments/assets/2d0461d1-6c39-44a0-93d7-e996d8ff35f7" />
 
-    Arp Mode: Arpeggiates the played notes based on the selected arpeggio mode.
-    Rec Mode: Records and plays back up to 8 patterns of variable length, with a maximum of 32 notes each.
-    Song Mode: Allows to chain up 8 recorded patterns, in any desired order.
-    Live Mode: Allows the playback of one of the 8 different patterns, each assigned to one buttons/multi-button-combo.
+Arp Mode: Arpeggiates the played notes based on the selected arpeggio mode.
+
+Rec Mode: Records and plays back up to 8 patterns of variable length, with a maximum of 32 notes each.
+
+Song Mode: Allows to chain up 8 recorded patterns, in any desired order.
+
+Live Mode: Allows the playback of one of the 8 different patterns, each assigned to one buttons/multi-button-combo.
         
 ## Functionalities:
 
