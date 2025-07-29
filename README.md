@@ -63,7 +63,7 @@ Live Mode: Allows the playback of one of the 8 different patterns, each assigned
 Load/save/edit up to 60 songs (8 traks 32 steps max), clone sequence, live/while arpeggiating & by step recording, 7 arp styles - oredered or key-press order, record, edit and play polyphonic drum tracks (with piano roll), tempo from 20 to 250 BPM with tap-tempo, pre/post, by-root and by-keyboard traspositions, 12 music scales, bake (normalize) transpositions and scale, random variations (range, probability and miss-note probability), up to 4 arp steps with adjustable distance, 7 arpeggiator/sequencer speeds, 3 trigger mode, swing, metronome with customizable time signature, midi channel selection, in/out sync options, external control by MIDI CC, UI sound settings, 
 (I'm working on a detailed user manual)
 
-![Wiring](https://github.com/user-attachments/assets/d4ef5a1f-47d1-4e6a-9500-db48eb0f6fc2)
+<img width="1787" height="2526" alt="Wiring" src="https://github.com/user-attachments/assets/e8c1400e-cfd4-4466-b08b-d79c87b5c9da" />
 
 A simulated demo of Arpmini can be explored on Wokwi via the link https://wokwi.com/projects/430279970010982401
 
