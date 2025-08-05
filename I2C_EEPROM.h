@@ -1,5 +1,8 @@
 #include <Arduino.h>
 
+extern void TCTask();
+extern void TCTask2();
+
 class I2C_EEPROM {
 public:
 
@@ -62,28 +65,30 @@ public:
 
 private:
 
-  // void I2C_wait() {  // with ACK
+  void I2C_wait() {  // with ACK
 
-  //   I2C_stop();
+    I2C_stop();
 
-  //   while (true) {
-  //     I2C_start();
-  //     I2C_write(0xA0);  // EEPROM I2C address + write
-  //     uint8_t status = TWSR & 0xF8;
-  //     if (status == 0x18) break;  // If ACK received, EEPROM is ready
-  //     I2C_stop();
-  //   }
-
-  //   I2C_stop();
-  //   I2C_disable();
-  // }
-
-  void I2C_wait() {  // without ACK
+    while (true) {
+      I2C_start();
+      I2C_write(0xA0);  // EEPROM I2C address + write
+      uint8_t status = TWSR & 0xF8;
+      if (status == 0x18) break;  // If ACK received, EEPROM is ready
+      I2C_stop();
+      TCTask();  // <-- do this while waiting for the writing to complete
+      TCTask2();  // <-- do this while waiting for the writing to complete
+    }
 
     I2C_stop();
     I2C_disable();
-    delayMicroseconds(4000);
   }
+
+  // void I2C_wait() {  // without ACK
+
+  //   I2C_stop();
+  //   I2C_disable();
+  //   delayMicroseconds(4000);
+  // }
 
   void I2C_begin(uint16_t addr) {
 
