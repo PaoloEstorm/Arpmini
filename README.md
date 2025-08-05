@@ -4,7 +4,7 @@ Arpmini is a miniature MIDI loopstation, offering advanced functionality as an a
 At the core of Arpmini is an Arduino Pro Micro with an ATmega32u4 microcontroller.
 You can connect multiple Arpminis together creating a larger and more complex system for live performance or music production.
 
-# ARPMINI RELAY ON [Arpmini-Core](https://github.com/PaoloEstorm/Arpmini-Core) TO WORK CORRECTLY!
+# ARPMINI REQUIRES [Arpmini-Core](https://github.com/PaoloEstorm/Arpmini-Core) TO WORK CORRECTLY!
 
 ## Give that dusty old synth in your closet a fresh new life! Unlock a ton of advanced features and unleash your creativity with Arpmini
 
