@@ -1,7 +1,7 @@
 // Based on "GyverOled" library by Alex Gyver, alex@alexgyver.ru
 // https://alexgyver.ru/
 
-#pragma GCC optimize ("-Os")
+#pragma GCC optimize("-Os")
 
 #include <Arduino.h>
 #include <Print.h>
@@ -14,6 +14,8 @@
 #define OLED_DISPLAY_OFF 0xAE
 #define OLED_DISPLAY_ON 0xAF
 #define OLED_CONTRAST 0x81
+
+extern void TCTask();
 
 // startup sequence
 const uint8_t _oled_init[] PROGMEM = {
@@ -46,7 +48,7 @@ public:
     DDRF |= (1 << PF6) | (1 << PF5);  // pin 19 & 20 as OUTPUT (RST & DC)
 
     PORTF &= ~(1 << PF6);  // pin 19 LOW (RST)
-    delayMicroseconds(200);
+    delayMicroseconds(400);
     PORTF |= (1 << PF6);  // pin 19 HIGH (RST)
 
     PORTB |= (1 << PB0);  // pin 17 HIGH (enable pull-up) (SS)
@@ -208,7 +210,7 @@ private:
   void setWindow(uint8_t x0, uint8_t y0, uint8_t x1, uint8_t y1) {
 
     PORTF &= ~(1 << PF5);  // pin 20 LOW (DC)
-    SPI_write(0x21);     // COLUMNADDR
+    SPI_write(0x21);       // COLUMNADDR
     SPI_write(x0);
     SPI_write(x1);
     SPI_write(0x22);  // PAGEADDR
@@ -220,7 +222,7 @@ private:
 
     SPDR = data;  // Load data into buffer
     while (!(SPSR & (1 << SPIF))) {
-      ;  // Wait for transmission complete
+      TCTask();  // <-- do this while waiting for the writing to complete
     }
   }
 
