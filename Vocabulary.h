@@ -1,3 +1,4 @@
+#include <avr/pgmspace.h>
 
 // vocabulary
 const char space[] PROGMEM = " ";
@@ -42,11 +43,14 @@ const char printtrig[] PROGMEM = "TRIG";
 const char printsnap[] PROGMEM = "SNAP";
 const char printmidi[] PROGMEM = "MIDI*\n\rCHANNEL";
 const char printsend[] PROGMEM = "SEND*";
-const char printext[] PROGMEM = "EXT*";
+const char printget[] PROGMEM = "GET*";
 const char printmap[] PROGMEM = "MAP*\n\rKEYS";
 const char printsound[] PROGMEM = "SOUND*";
 const char printreboot[] PROGMEM = "REBOOT";
 const char always[] PROGMEM = "ALWAYS";
+const char printkeyb[] PROGMEM = "KEYB";
+const char printtransp[] PROGMEM = "TRANSP.";
+const char printstrum[] PROGMEM = "STRUM";
 
 const char noteNames[][3] PROGMEM = {
   "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"
@@ -84,6 +88,10 @@ const char snapmodes[][8] PROGMEM = {
 
 const char sortmodes[][10] PROGMEM = {
   "KEY-ORDER", "ORDERED"
+};
+
+const char drumkeybmodes[][6] PROGMEM = {
+  "FREE", "SYNC", "ROLL", "MIXER"
 };
 
 const char* const modes[] = { arp, rec, song, printlive };
