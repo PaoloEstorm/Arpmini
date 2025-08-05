@@ -2,7 +2,7 @@
  *  @file       Arpmini.ino
  *  Project     Estorm - Arpmini
  *  @brief      MIDI Sequencer & Arpeggiator
- *  @version    2.22
+ *  @version    2.23
  *  @author     Paolo Estorm
  *  @date       06/14/25
  *  @license    GPL v3.0 
@@ -25,7 +25,7 @@
 // https://brendanclarke.com/wp/2014/04/23/arduino-based-midi-sequencer/
 
 // system
-const char version[] PROGMEM = "2.22";
+const char version[] PROGMEM = "2.23";
 #include "Vocabulary.h"
 #include "Random8.h"
 Random8 Random;
@@ -92,7 +92,7 @@ uint8_t mapButtonSelect = 0;     // 0=red, 1=yellow, 2=blue, 3=green
 
 // menu
 uint8_t menuitem = 2;        // is the number associated with every voice in the main menu. 0 to 18
-uint8_t menunumber = 0;      // 0=mainscreen, 1=menu, 2=submenu, 3=load\save menu, 4=inter-recording popup
+uint8_t menunumber = 0;      // 0=mainscreen, 1=menu, 2=submenu, 3=load\save menu, 4=popup, 5=beat editor
 uint8_t savemode = 0;        // 0=bake, 1=clone, 2=new, 3=save, 4=load, 5=delete
 uint8_t savecurX = 0;        // cursor position in load/save menu 0-5
 uint8_t savepage = 0;        // page number for external eeprom
@@ -134,7 +134,7 @@ volatile bool stepEnable = false;  // keep track of internal timer clicks
 // arpeggiator
 const uint8_t holdNotes = 10;    // maximum number of notes that can be arpeggiated
 uint8_t activeNotes[holdNotes];  // contains the MIDI notes the arpeggiator plays
-bool ArpDirection;               // alternate up-down for arpstyle 3 & 4
+bool ArpDirection;               // alternate up-down for arpstyle 2, 3, 4 & 5
 uint8_t arpstyle = 0;            // 0=up, 1=down, 2=up-down, 3=down-up, 4=up+down, 5=down+up, 6=random
 uint8_t arpcount;                // number of times the arpeggio repeats
 uint8_t arprepeat = 1;           // number of times the arpeggios gets trasposed by "stepdistance"
@@ -142,9 +142,11 @@ int8_t stepdistance = 12;        // distance in semitones between each arp repea
 int8_t numNotesHeld = 0;         // how many notes are currently pressed on the keyboard
 uint8_t numActiveNotes = 0;      // number of notes currently stored in the holdNotes array
 uint8_t trigMode = 0;            // 0=hold, 1=trigger, 2=retrigged
+bool strum = false;              // strum mode enabled?
 
 // sequencer
 bool recording = false;                          // is the sequencer in the recording state?
+bool keybTransp = true;                          // enable 'roland' mode?
 uint8_t rolandLowNote;                           // for 'roland' mode, the sequence is transposed based on the lowest note recorded
 uint8_t rolandTransposeNote;                     // the last note number received for transposing the sequence
 uint8_t seqLength = 16;                          // the number of steps the sequence is looped for - can be less than maxSeqLength
@@ -168,7 +170,8 @@ int8_t pitch = 0;                // pitch transposition: -12 to +12
 bool pitchmode = false;          // 0=before scale, 1=scale root
 uint8_t scale = 0;               // 0=linear, 1=penta.major, 2=penta.minor, 3=major, 4=minor, 5=harmonic minor, 6=locrian, 7=lydian, 8=dorian, 9=phrygian, 10=inverted, 11=hexatonal
 int8_t posttranspose = 0;        // post-scale pitch transposition: -12 to +12
-uint8_t noteLengthSelect = 3;    // set the notelength, 0=random, 1=20%, 2=40%, 3=60%, 4=80%, 5=100%, 6=120%
+uint8_t noteLengthSelect = 3;    // set the notelength, 0=random, 1=10%, 2=30%, 3=50%, 4=70%, 5=90%, 6=110%
+bool longRandomLength = true;    // allow the longest (110%) length when random notelength is selected
 bool sortnotes = true;           // sort the ActiveNotes array?
 bool muted = false;              // temporarily suspend playing any notes from the sequencer
 bool lockmute = false;           // keep the mute muted. only in arp, seq & song mode
@@ -191,9 +194,11 @@ bool drumModeSelect = false;      // pre-selection for drum mode
 const uint8_t drumSlots = 8;      // number of drum slots available. must be 8 (8bit)
 uint8_t DrumNotes[drumSlots];     // midi notes associated to each drum slot
 bool ActiveDrumNotes[drumSlots];  // keep track of the currently pressed midi drum notes
-
-bool editorPopup = false;    // normal popup or beat editor popup?
-uint8_t currentSeqEdit = 0;  // sequence that you are editing in beat editor
+bool DrumNotesMixer[drumSlots];   // enable/disable drum slot
+bool drumroll = false;            // repeat note while key is pressed?
+uint8_t drumKeybMode = 1;         // 0=free, 1=sync, 2=roll, 3=mixer
+bool editorPopup = false;         // normal popup or beat editor popup?
+uint8_t currentSeqEdit = 0;       // sequence that you are editing in beat editor
 
 uint8_t colum = 0;   // vertical position in beat editor
 uint8_t row = 0;     // orizontal position in beat editor
@@ -204,6 +209,7 @@ void setup() {  // initialization setup
 
   DDRD &= ~(1 << PD5);  // disable LED_BUILTIN_TX (on-board LED) (set as input)
 
+  // EEPROM initialization
   EEPROM2.init();
 
   // oled screen initialization
@@ -211,7 +217,8 @@ void setup() {  // initialization setup
   oled.clear();
   oled.setSize(3);
 
-  Serial.begin(115200);  // start serial USB at 115200 baud
+  // start serial USB at 115200 baud
+  Serial.begin(115200);
 
   // initialize timer1 used for internal clock
   noInterrupts();
@@ -261,19 +268,26 @@ void setup() {  // initialization setup
   for (uint8_t i = 0; i < 8; i++) {
     if (i < 4) buttonCC[i] = EEPROM2.read(4 + i);  // read from eeprom cc-mapping
     DrumNotes[i] = EEPROM2.read(8 + i);            // initialize the drum notes from eeprom
+    DrumNotesMixer[i] = true;                      // initialize the drum notes mixer
     BPMbuffer[i] = BPM;                            // initialize the tap tempo array
   }
 
+  // turn off all LEDs
   AllLedsOff();
 
+  // apply sound settings
   SetSound(soundmode);
+
+  // apply ports settings
   SetSyncPort(syncport);
 
+  // initialize sequencer
   SetBPM(BPM);
   ClearSeqPatternArray();
   SynthReset();
   Startposition();
 
+  // startup animation
   for (uint8_t i = 0; i <= 24; i++) {
     oled.setCursorXY(2, i);
     oled.print(F("ARPMINI"));
@@ -287,8 +301,10 @@ void setup() {  // initialization setup
   oled.setCursorXY(25, 56);
   oled.print(F("FIRMWARE "));
   oled.printF(version);
-  Bip(2);  // Startup Sound
+  Bip(2);  // startup Sound
   delay(2000);
+
+  // go to main screen
   PrintMainScreen();
 }
 
@@ -300,10 +316,10 @@ void safedigitalWrite(uint8_t pin, bool state) {  // avoid digitalwrite and i2c 
 void SystemReset() {  // restart system
 
   wdt_enable(WDTO_15MS);
-  while (1) {}  // Wait reset
+  while (1) {}  // wait reset
 }
 
-ISR(TIMER1_COMPA_vect) {  // hardware timer for internal clock
+ISR(TIMER1_COMPA_vect) {  // hardware Timer1 for internal clock
 
   stepEnable = true;
 }
@@ -313,23 +329,32 @@ void SetBPM(uint8_t tempo) {  // change Timer1 speed to match BPM (20-250)
   OCR1A = ((250000UL * 5) - tempo) / (2 * tempo);
 }
 
-void loop() {  // run continuously
+void TCTask() {  // time critical task
 
-  MIDI.read();
-  MIDI2.read();
-
-  DebounceButtons();
-  ScreenOnTimer();
-  GoToMenuTimer();
-
-  if (stepEnable) {
+  if (stepEnable) {  // check if is time to run the internal clock
     stepEnable = false;
     HandleInternalClock();
   }
+}
+
+void TCTask2() {  // time critical task 2
+  // read incoming MIDI data
+  MIDI.read();
+  MIDI2.read();
+}
+
+void loop() {  // run continuously
+
+  TCTask();
+  TCTask2();
 
   if (Serial.available()) {
     PcSync(Serial.read());
   }
+
+  DebounceButtons();
+  ScreenOnTimer();
+  GoToMenuTimer();
 }
 
 void ResetEEPROM() {  // initialize the EEPROM with default values
@@ -421,7 +446,8 @@ void PcSync(uint8_t data) {  // exchange data with PC
     mode = 0;
     slot = 0;
     writeIndex = 32;
-    Serial.write(CMD_STOP);  // stop confirmation
+    Serial.write(CMD_STOP);                            // stop confirmation
+    if (menunumber == 3) PrintLoadSaveMenu(savemode);  // update screen
   }
 }
 
@@ -575,7 +601,7 @@ void SetSound(uint8_t mode) {  // sound settings
   uisound = (mode == 1);
 }
 
-void Bip(uint8_t type) {  // sounds
+void Bip(uint8_t type) {  // bip sounds
 
   if (sound) {
     if (uisound) {
@@ -657,15 +683,15 @@ void RunClock() {  // main clock
     else if (modeselect == 3 && menunumber == 0) AllLedsOff();
   }
 
-  if (modeselect < 2) {  // not song & live mode
-    if (trigMode > 0 && numNotesHeld == 0 && !sustain) muted = true;
-  }
+  if (((modeselect == 0 && (trigMode > 0 || strum)) || (modeselect == 1 && trigMode > 0)) && numNotesHeld == 0 && !sustain) muted = true;
 
   for (uint8_t i = 0; i < queueLength; i++) {  // decrement crons
-    if (cronLength[i] > -1) {
-      cronLength[i] = cronLength[i] - SetNoteLength();  // this number is subtracted from the cronLength buffer for each frame a note is active
+
+    if (cronNote[i] > -1) {  // if note is queued, subtract time remaining
+      cronLength[i] = cronLength[i] - SetNoteLength();
     }
-    if (cronLength[i] < -1) {
+
+    if (cronLength[i] < -1) {  // if no time remaining, remove it
       MIDI.sendNoteOff(cronNote[i], 0, midiChannel);
       cronLength[i] = -1;
       cronNote[i] = -1;
@@ -701,26 +727,26 @@ void FlipFlopFPS() {  // alternates ticksPerStep values (for swing)
 
 uint8_t SetNoteLength() {  // set the note duration
 
-  uint8_t noteLength;
+  static uint8_t noteLength = 30;
   static const uint8_t noteLengths[] = { 55, 35, 30, 25, 20, 15 };  // noteLengths
 
-  if (noteLengthSelect == 0) {  // random
-    noteLength = Random.get(10, 55);
-  } else noteLength = noteLengths[noteLengthSelect - 1];
+  if (countTicks == 0) {
+    if (noteLengthSelect == 0) {  // random
+      noteLength = noteLengths[Random.get(0, longRandomLength + 4)];
+    } else noteLength = noteLengths[noteLengthSelect - 1];
+  } else return (noteLength);
 
   if (swing && (StepSpeed % 2 == 0)) {
     if (flipflopEnable) noteLength = noteLength - 4;
     else noteLength = noteLength + 10;
   }
 
-  if (StepSpeed == 0) noteLength = noteLength * 2;        // 1/32
-  else if (StepSpeed == 1) noteLength = noteLength + 10;  // 1/24
-  else if (StepSpeed == 3) noteLength = noteLength - 5;   // 1/12
-  else if (StepSpeed == 4) noteLength = noteLength / 2;   // 1/8
-  else if (StepSpeed == 5) noteLength = noteLength - 10;  // 1/6
-  else if (StepSpeed == 6) noteLength = noteLength / 4;   // 1/4
-
-  if (drumMode && noteLength < 20) noteLength = 20;
+  if (StepSpeed == 0) noteLength = noteLength * 2;             // 1/32
+  else if (StepSpeed == 1) noteLength = noteLength + 10;       // 1/24
+  else if (StepSpeed == 3) noteLength = noteLength - 5;        // 1/12
+  else if (StepSpeed == 4) noteLength = noteLength / 2;        // 1/8
+  else if (StepSpeed == 5) noteLength = (noteLength / 3) + 1;  // 1/6
+  else if (StepSpeed == 6) noteLength = noteLength / 4;        // 1/4
 
   return (noteLength);
 }
@@ -755,12 +781,14 @@ void HandleStep() {  // step sequencer
 
     countStep = (countStep + 1) % seqLength;  // seq. sequencer
 
-    if (!muted && playing && !recording && drumMode) {
+    if (/*!muted &&*/ playing /*&& !recording*/ && drumMode && (drumKeybMode == 1 || drumKeybMode == 2)) {
 
       for (uint8_t i = 0; i < drumSlots; i++) {  // play drums in sync
         if (ActiveDrumNotes[i]) {
-          QueueNote(DrumNotes[i]);
-          ActiveDrumNotes[i] = false;
+          if (drumKeybMode == 1) ActiveDrumNotes[i] = false;
+          if (recording) {
+            if (drumKeybMode == 2) bitSet8(noteSeq[currentSeq][countStep], i);  // record roll
+          } else QueueNote(DrumNotes[i]);
         }
       }
     }
@@ -812,7 +840,7 @@ void HandleStep() {  // step sequencer
         } else {
           for (uint8_t i = 0; i < drumSlots; i++) {
             if (bitRead(note, i)) {
-              QueueNote(DrumNotes[i]);
+              if (DrumNotesMixer[i]) QueueNote(DrumNotes[i]);  // play drum note
             }
           }
         }
@@ -898,7 +926,7 @@ void HandleContinue() {  // continue message - start the sequence
   internalClock = false;
   countTicks = 0;
   playing = true;
-  if (recording) Startposition();
+  //if (recording) Startposition();
   UpdateScreenBPM();
 }
 
@@ -922,7 +950,6 @@ void HandleStop() {  // stop the sequence and switch over to internal clock
 void StartAndStop() {  // manage starts and stops
 
   playing = !playing;
-
   if (internalClock) {
     if (playing) Startposition();
     if (sendrealtime) {
@@ -949,7 +976,7 @@ void Startposition() {  // called every time the sequencing starts or stops
     countTicks = -1;
   }
 
-  if (numNotesHeld > 0) AllNotesOff();
+  AllNotesOff();
 
   arpcount = 0;
   countStep = -1;
@@ -1015,9 +1042,9 @@ void HandleCC(uint8_t channel, uint8_t cc, uint8_t value) {  // handle midi CC m
 
     else if (cc == 64) {  // sustain pedal cc
       sustain = value;
-      if (!playing || (playing && trigMode == 0)) MIDI.sendControlChange(cc, value, channel);  // pass through sustain pedal cc
-    } else MIDI.sendControlChange(cc, value, channel);                                         // pass through every other cc
-  } else MIDI.sendControlChange(cc, value, channel);                                           // pass through if different channel cc
+      if (!playing || playing && trigMode == 0 && (modeselect != 0 || modeselect == 0 && !strum)) MIDI.sendControlChange(cc, value, channel);  // pass through sustain pedal cc
+    } else MIDI.sendControlChange(cc, value, channel);                                                                                         // pass through every other cc
+  } else MIDI.sendControlChange(cc, value, channel);                                                                                           // pass through if different channel cc
 }
 
 void HandleNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle a noteOn event
@@ -1034,8 +1061,14 @@ void HandleNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle 
         Bip(2);
       }
 
-      for (uint8_t i = 0; i < drumSlots; i++) {               // check if incoming note is in the drum notes range
-        if (note == DrumNotes[i]) ActiveDrumNotes[i] = true;  // update array
+      for (uint8_t i = 0; i < drumSlots; i++) {  // check if incoming note is in the drum notes range
+        if (note == DrumNotes[i]) {
+          if (drumKeybMode != 3) ActiveDrumNotes[i] = true;  // update array
+          else if (!recording && playing) {
+            DrumNotesMixer[i] = !DrumNotesMixer[i];  // toogle mixer
+            if (menunumber == 5) PrintBeatEditor();  // if in beat editor, update screen
+          }
+        }
       }
     }
 
@@ -1059,7 +1092,7 @@ void HandleNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle 
 
     } else {  // if playing
 
-      if (modeselect < 2 && trigMode > 0) {  // not song & live mode
+      if ((modeselect == 0 && (trigMode > 0 || strum)) || (modeselect == 1 && trigMode > 0)) {  // not song & live mode
         muted = false;
         arpcount = 0;
         if (trigMode == 2 && numNotesHeld == 1) {  // trigmode 2 retrig start sequence
@@ -1097,7 +1130,7 @@ void HandleNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle 
             for (uint8_t i = 0; i < drumSlots; i++) {
               if (ActiveDrumNotes[i]) {
                 bitSet8(noteSeq[currentSeq][stepIndex], i);
-                ActiveDrumNotes[i] = false;
+                if (drumKeybMode < 2) ActiveDrumNotes[i] = false;
               }
             }
           }
@@ -1105,10 +1138,13 @@ void HandleNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle 
           if (stepIndex == countStep) {
             QueueNote(note);
           }
-        } else rolandTransposeNote = note;  // transpose to note only if playing and not recording
+        } else {  // if playing && !recording
+          if (!drumMode) {
+            if (keybTransp) rolandTransposeNote = note;   // transpose to note only if playing and not recording
+          } else if (drumKeybMode == 0) QueueNote(note);  // free play drum keybmode
+        }
       }
     }
-
   } else MIDI.sendNoteOn(note, velocity, channel);  // bypass if different channel
 }
 
@@ -1120,8 +1156,10 @@ void HandleNoteOff(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle
     if (numNotesHeld < 0) numNotesHeld = 0;
 
     if (drumMode) {
-      for (uint8_t i = 0; i < drumSlots; i++) {                // check if incoming note is in the drum notes range
-        if (note == DrumNotes[i]) ActiveDrumNotes[i] = false;  // update array
+      for (uint8_t i = 0; i < drumSlots; i++) {  // check if incoming note is in the drum notes range
+        if (note == DrumNotes[i]) {
+          if (drumKeybMode != 3) ActiveDrumNotes[i] = false;  // update array if not in mixer mode
+        }
       }
     }
 
@@ -1129,7 +1167,7 @@ void HandleNoteOff(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle
 
     else {  // if playing
 
-      if (modeselect == 0 && trigMode > 0 && !sustain) {  // arp mode and playing
+      if (modeselect == 0 && (trigMode > 0 || strum) && !sustain) {  // arp mode and playing
         if (numNotesHeld == 0) muted = true;
         for (uint8_t i = 0; i < holdNotes; i++) {
           if (activeNotes[i] == note) {
@@ -1209,9 +1247,9 @@ int8_t Jitter(uint8_t range, uint8_t probability) {  // add random variations
 
 bool ProbabilityMiss(uint8_t missProb) {  // return true or false randomly
 
-  uint8_t chance = Random.get(1, 11);
-  if (missProb < chance) return true;
-  else return false;
+  uint8_t chance = Random.get(1, 10);
+  if (chance <= missProb) return false;
+  else return true;
 }
 
 uint8_t TransposeAndScale(int note) {  // apply transposition and scale
@@ -1232,7 +1270,7 @@ uint8_t TransposeAndScale(int note) {  // apply transposition and scale
   return note;
 }
 
-void QueueNote(int8_t note) {  // send notes to the midi port
+void QueueNote(int8_t note) {  // play notes
 
   static const uint8_t defaultVelocity = 64;
 
@@ -1253,15 +1291,23 @@ void QueueNote(int8_t note) {  // send notes to the midi port
     }
   }
 
-  if (ProbabilityMiss(jitmiss)) {  // pass note or not?
-    for (uint8_t i = 0; i < queueLength; i++) {
-      if ((cronLength[i] < 0) || (cronNote[i] == note)) {
-        MIDI.sendNoteOn(note, defaultVelocity, midiChannel);
-        if (cronNote[i] >= 0) MIDI.sendNoteOff(cronNote[i], 0, midiChannel);
-        cronNote[i] = note;
-        cronLength[i] = 100;
-        return;
-      }
+  if (!ProbabilityMiss(jitmiss)) return;  // queue note or skip?
+
+  for (uint8_t i = 0; i < queueLength; i++) {  // if note is already stored in the queue, remove it
+    if (cronNote[i] == note && cronNote[i] >= 0) {
+      MIDI.sendNoteOff(cronNote[i], 0, midiChannel);
+      cronNote[i] = -1;
+      cronLength[i] = -1;
+      break;
+    }
+  }
+
+  for (uint8_t i = 0; i < queueLength; i++) {  // place note in a free slot and play it
+    if (cronLength[i] < 0) {
+      MIDI.sendNoteOn(note, defaultVelocity, midiChannel);
+      cronNote[i] = note;
+      cronLength[i] = 100;
+      return;
     }
   }
 }
@@ -1293,28 +1339,27 @@ void SetArpStyle(uint8_t style) {  // arpeggiator algorithms
 
   uint8_t arpup = (countStep + 1) % numActiveNotes;
   uint8_t arpdown = (numActiveNotes + (countStep - 1)) % numActiveNotes;
-  uint8_t arpcountplus = 1 + (arpcount % arprepeat);
   int8_t activenotes = numActiveNotes - 1;
 
   switch (style) {
     case 0:  // up
       countStep = arpup;
-      if (countStep == 0) arpcount = arpcountplus;
+      if (countStep == 0) arpcount++;
       break;
 
     case 1:  // down
       countStep = arpdown;
-      if (countStep == activenotes) arpcount = arpcountplus;
+      if (countStep == activenotes) arpcount++;
       break;
 
     case 2:  // up-down
       if (ArpDirection) {
         countStep = arpup;
-        if (countStep == 0) arpcount = arpcountplus;
+        if (countStep == 0) arpcount++;
         if ((countStep + 1) == numActiveNotes) ArpDirection = false;
       } else {
         countStep = arpdown;
-        if (countStep == 0) arpcount = arpcountplus;
+        if (countStep == 0) arpcount++;
         if (countStep == 0) ArpDirection = true;
       }
       break;
@@ -1322,11 +1367,11 @@ void SetArpStyle(uint8_t style) {  // arpeggiator algorithms
     case 3:  // down-up
       if (ArpDirection) {
         countStep = arpdown;
-        if (countStep == activenotes) arpcount = arpcountplus;
+        if (countStep == activenotes) arpcount++;
         if (countStep == 0) ArpDirection = false;
       } else {
         countStep = arpup;
-        if (countStep == activenotes) arpcount = arpcountplus;
+        if (countStep == activenotes) arpcount++;
         if ((countStep + 1) == numActiveNotes) ArpDirection = true;
       }
       break;
@@ -1343,7 +1388,7 @@ void SetArpStyle(uint8_t style) {  // arpeggiator algorithms
         if (countStep < 0) {
           countStep = 0;
           ArpDirection = true;
-          arpcount = arpcountplus;
+          arpcount++;
         }
       }
       break;
@@ -1360,15 +1405,20 @@ void SetArpStyle(uint8_t style) {  // arpeggiator algorithms
         if (countStep > activenotes) {
           countStep = activenotes;
           ArpDirection = true;
-          arpcount = arpcountplus;
+          arpcount++;
         }
       }
       break;
 
     case 6:  // random
-      countStep = Random.get(0, numActiveNotes);
-      arpcount = Random.get(1, arprepeat + 1);
+      countStep = Random.get(0, numActiveNotes - 1);
+      arpcount = Random.get(1, arprepeat);
       break;
+  }
+
+  if (arpcount > arprepeat) {
+    arpcount = 1;
+    if (strum && !sustain) muted = true;
   }
 
   if (arpcount < 1) arpcount = 1;
@@ -1416,9 +1466,9 @@ void PrintMainScreen() {  // print menu 0 to the screen
     oled.setCursorXY(36, 16);
     oled.printF(seq);
     oled.print(currentSeq + 1);
-    oled.setCursorXY(((seqLength > 9) ? 12 : 17), 32);
+    oled.setCursorXY(((seqLength > 9) ? 14 : 18), 32);
     oled.printF(length);
-    oled.printF(space);
+    oled.shiftX();
     oled.print(seqLength);
   }
 
@@ -1517,8 +1567,8 @@ void PrintMenu(uint8_t item) {  // print main menu - menu 1
 
   switch (item) {
 
-    case 0:  // load-save
-      oled.printlnF(file);
+    case 0:  // file
+      oled.printF(file);
       break;
 
     case 1:  // mode select
@@ -1526,7 +1576,7 @@ void PrintMenu(uint8_t item) {  // print main menu - menu 1
       oled.printF(printselect);
       break;
 
-    case 2:  // seq.select
+    case 2:  // arp style / seq.select / edit chain / start-stop live
       if (modeselect == 0) {
         oled.printlnF(arp);
         oled.printF(printstyle);
@@ -1549,8 +1599,8 @@ void PrintMenu(uint8_t item) {  // print main menu - menu 1
       }
       break;
 
-    case 3:  // pitch
-      if (!drumMode) oled.printlnF(printpitch);
+    case 3:  // pitch / beat editor
+      if (!drumMode) oled.printF(printpitch);
       else {
         oled.println(F("BEAT"));
         oled.printF(editor);
@@ -1558,19 +1608,19 @@ void PrintMenu(uint8_t item) {  // print main menu - menu 1
       break;
 
     case 4:  // tempo
-      oled.printlnF(printtempo);
+      oled.printF(printtempo);
       break;
 
     case 5:  // scale / drum notes
-      if (!drumMode) oled.printlnF(printscale);
+      if (!drumMode) oled.printF(printscale);
       else {
         oled.println(F("DRUM*"));
         oled.print(F("NOTES"));
       }
       break;
 
-    case 6:  // jitter
-      oled.printlnF(printrandom);
+    case 6:  // random
+      oled.printF(printrandom);
       break;
 
     case 7:  // note lenght
@@ -1588,42 +1638,43 @@ void PrintMenu(uint8_t item) {  // print main menu - menu 1
       }
       break;
 
-    case 9:  // arp/seq. speed
-      oled.printlnF(speed);
+    case 9:  // speed & swing
+      oled.printF(speed);
       break;
 
-    case 10:  // trig.mode / chain rec / snap mode
+    case 10:  // trig.mode / chain rec / snap time
       if (modeselect == 2) {
         oled.printlnF(chain);
         oled.printF(rec);
       } else if (modeselect == 3) {
         oled.printlnF(printsnap);
-        oled.printF(printmode);
+        oled.print(F("TIME"));
       } else {
         oled.printlnF(printtrig);
-        oled.printF(printmode);
+        oled.printF(printstyle);
       }
       break;
 
-    case 11:  // swing
-      oled.printlnF(printswing);
+    case 11:  // keyboard control
+      oled.printlnF(printkeyb);
+      oled.print(F("CONTROL"));
       break;
 
-    case 12:  // metro
-      oled.printlnF(printmetro);
+    case 12:  // metronome
+      oled.printF(printmetro);
       break;
 
     case 13:  // midi channel
       oled.printF(printmidi);
       break;
 
-    case 14:  // midi realtime messages
+    case 14:  // send sync
       oled.printlnF(printsend);
       oled.printF(sync);
       break;
 
-    case 15:  // sync port
-      oled.printlnF(printext);
+    case 15:  // get sync
+      oled.printlnF(printget);
       oled.printF(sync);
       break;
 
@@ -1632,11 +1683,11 @@ void PrintMenu(uint8_t item) {  // print main menu - menu 1
       break;
 
     case 17:  // sound
-      oled.printlnF(printsound);
+      oled.printF(printsound);
       break;
 
     case 18:  // restart
-      oled.printlnF(printreboot);
+      oled.printF(printreboot);
       break;
   }
 }
@@ -1655,7 +1706,7 @@ void SubmenuSettings(uint8_t item, uint8_t dir) {  // print & handles changing s
 
   switch (item) {
 
-    case 0:  // load-save
+    case 0:  // file
 
       //-----BUTTONS COMMANDS----//
       if (keyEnable) {
@@ -1691,9 +1742,9 @@ void SubmenuSettings(uint8_t item, uint8_t dir) {  // print & handles changing s
       oled.printF(modes[premodeselect]);
       break;
 
-    case 2:  // arp style / seq.select / edit song
+    case 2:  // arp style / seq.select / edit chain / start-stop live
 
-      if (modeselect == 0) {
+      if (modeselect == 0) {  // arp style
 
         //-----BUTTONS COMMANDS----//
         if (keyEnable) {
@@ -1719,11 +1770,11 @@ void SubmenuSettings(uint8_t item, uint8_t dir) {  // print & handles changing s
         oled.printF(sortmodes[sortnotes]);
       }
 
-      else if (modeselect == 1) {
+      else if (modeselect == 1) {  // seq.select
 
         //-----BUTTONS COMMANDS----//
         if (keyEnable) {
-          if (dir == goUp) {
+          if (dir == goDown) {
             if (currentSeq > 0) currentSeq--;
           } else {
             if (currentSeq < (numberSequences - 1)) currentSeq++;
@@ -1735,7 +1786,7 @@ void SubmenuSettings(uint8_t item, uint8_t dir) {  // print & handles changing s
         oled.print(currentSeq + 1);
       }
 
-      else if (modeselect == 2) {
+      else if (modeselect == 2) {  // edit chain
 
         //-----BUTTONS COMMANDS----//
         if (keyEnable) {
@@ -1769,7 +1820,7 @@ void SubmenuSettings(uint8_t item, uint8_t dir) {  // print & handles changing s
         oled.printF(upcursor);
       }
 
-      else if (modeselect == 3) {
+      else if (modeselect == 3) {  // start-stop live
         StartAndStop();
         muted = playing;
         confirmsound = true;
@@ -1778,7 +1829,7 @@ void SubmenuSettings(uint8_t item, uint8_t dir) {  // print & handles changing s
       }
       break;
 
-    case 3:  // pitch / edit sequence
+    case 3:  // pitch / beat editor
 
       if (drumMode) {
         currentSeqEdit = currentSeq;
@@ -1846,9 +1897,9 @@ void SubmenuSettings(uint8_t item, uint8_t dir) {  // print & handles changing s
       if (!internalClock) oled.print(F(" INT"));
       break;
 
-    case 5:  // scale / map drum notes
+    case 5:  // scale / drum notes
 
-      if (!drumMode) {
+      if (!drumMode) {  // scale select
         //-----BUTTONS COMMANDS----//
         if (keyEnable) {
           if (!greenstate) {
@@ -1871,11 +1922,11 @@ void SubmenuSettings(uint8_t item, uint8_t dir) {  // print & handles changing s
         oled.printlnF(printscale);
         oled.printF(scaleNames[scale]);
         PrintBottomText();
-        oled.print(F("TRANSP."));
+        oled.printF(printtransp);
         if (posttranspose > 0) oled.printF(plus);
         oled.print(posttranspose);
 
-      } else {  // drumMode
+      } else {  // map drum notes
 
         //-----BUTTONS COMMANDS----//
         if (keyEnable) {
@@ -1907,7 +1958,7 @@ void SubmenuSettings(uint8_t item, uint8_t dir) {  // print & handles changing s
       }
       break;
 
-    case 6:  // jitter
+    case 6:  // random
 
       //-----BUTTONS COMMANDS----//
       if (keyEnable) {
@@ -1958,19 +2009,27 @@ void SubmenuSettings(uint8_t item, uint8_t dir) {  // print & handles changing s
 
       //-----BUTTONS COMMANDS----//
       if (keyEnable) {
-        if (dir == goUp) {
-          if (noteLengthSelect < 6) noteLengthSelect++;
-        } else {
-          if (noteLengthSelect > 0) noteLengthSelect--;
+        if (!greenstate) {
+          if (dir == goUp) {
+            if (noteLengthSelect < 6) noteLengthSelect++;
+          } else {
+            if (noteLengthSelect > 0) noteLengthSelect--;
+          }
+        } else if (noteLengthSelect == 0) {
+          if (dir == goUp) longRandomLength = true;
+          else longRandomLength = false;
         }
       }
 
       //-----SCREEN COMMANDS----//
       oled.printlnF(length);
-      if (noteLengthSelect == 0)
+      if (noteLengthSelect == 0) {
         oled.printF(printrandom);
-      else {
-        oled.print(noteLengthSelect * 20);
+        PrintBottomText();
+        if (!longRandomLength) oled.print(F("MAX 90%"));
+        else oled.print(F("MAX 110%"));
+      } else {
+        oled.print((noteLengthSelect * 20) - 10);
         oled.printF(percent);
       }
       break;
@@ -2020,24 +2079,35 @@ void SubmenuSettings(uint8_t item, uint8_t dir) {  // print & handles changing s
       }
       break;
 
-    case 9:  // arp/seq. speed
+    case 9:  // speed & swing
 
       //-----BUTTONS COMMANDS----//
       if (keyEnable) {
-        if (dir == goUp) {
-          if (StepSpeed > 0) StepSpeed--;
+        if (!greenstate) {
+          if (dir == goUp) {
+            if (StepSpeed > 0) StepSpeed--;
+          } else {
+            if (StepSpeed < 6) StepSpeed++;
+          }
+          if (playing) FixSync = true;
         } else {
-          if (StepSpeed < 6) StepSpeed++;
+          if (dir == goUp) swing = true;
+          else swing = false;
         }
-        if (playing) FixSync = true;
       }
 
       //-----SCREEN COMMANDS----//
       oled.printlnF(speed);
       oled.printF(speeds[StepSpeed]);
+
+      PrintBottomText();
+      oled.printF(printswing);
+      oled.shiftX();
+      if (!swing) oled.printF(off);
+      else oled.printF(on);
       break;
 
-    case 10:  // trig.mode / chain rec
+    case 10:  // trig.mode / chain rec / snap time
 
       if (modeselect < 2) {
 
@@ -2051,7 +2121,7 @@ void SubmenuSettings(uint8_t item, uint8_t dir) {  // print & handles changing s
         }
 
         //-----SCREEN COMMANDS----//
-        oled.printlnF(printmode);
+        oled.printlnF(printtrig);
         oled.printF(trigmodes[trigMode]);
       }
 
@@ -2081,26 +2151,54 @@ void SubmenuSettings(uint8_t item, uint8_t dir) {  // print & handles changing s
         }
 
         //-----SCREEN COMMANDS----//
-        oled.printlnF(printmode);
+        oled.printlnF(printsnap);
         oled.printF(snapmodes[snapmode]);
       }
       break;
 
-    case 11:  // swing
+    case 11:  // keyboard control
 
-      //-----BUTTONS COMMANDS----//
-      if (keyEnable) {
-        if (dir == goUp) swing = true;
-        else swing = false;
+      oled.printlnF(printkeyb);
+
+      if (modeselect > 0) {  // not arp mode
+        if (!drumMode) {     // not drum mode
+          //-----BUTTONS COMMANDS----//
+          if (keyEnable) {
+            if (dir == goUp) keybTransp = true;
+            else keybTransp = false;
+          }
+          //-----SCREEN COMMANDS----//
+          if (keybTransp) oled.printF(printtransp);
+          else oled.print(F("NONE"));
+        }
+
+        else {  // drum mode
+          //-----BUTTONS COMMANDS----//
+          if (keyEnable) {
+            if (dir == goDown) {
+              if (drumKeybMode < 3) drumKeybMode++;
+            } else {
+              if (drumKeybMode > 0) drumKeybMode--;
+            }
+          }
+          //-----SCREEN COMMANDS----//
+          oled.printF(drumkeybmodes[drumKeybMode]);
+        }
       }
 
-      //-----SCREEN COMMANDS----//
-      oled.printlnF(printswing);
-      if (!swing) oled.printF(off);
-      else oled.printF(on);
+      else {  // arp mode
+        //-----BUTTONS COMMANDS----//
+        if (keyEnable) {
+          if (dir == goUp) strum = true;
+          else strum = false;
+        }
+        //-----SCREEN COMMANDS----//
+        if (strum) oled.printF(printstrum);
+        else oled.print(F("LOOP"));
+      }
       break;
 
-    case 12:  // metro
+    case 12:  // metronome
 
       //-----BUTTONS COMMANDS----//
       if (keyEnable) {
@@ -2148,7 +2246,7 @@ void SubmenuSettings(uint8_t item, uint8_t dir) {  // print & handles changing s
       oled.print(midiChannel);
       break;
 
-    case 14:  // send midi realtime messages
+    case 14:  // send sync
 
       //-----BUTTONS COMMANDS----//
       if (keyEnable) {
@@ -2169,7 +2267,7 @@ void SubmenuSettings(uint8_t item, uint8_t dir) {  // print & handles changing s
       oled.printF(sendmodes[sendrealtime]);
       break;
 
-    case 15:  // sync port
+    case 15:  // get sync
 
       //-----BUTTONS COMMANDS----//
       if (keyEnable) {
@@ -2261,7 +2359,9 @@ void PrintLoadSaveMenu(uint8_t mode) {  // print load-save menu - menu 3
   if (mode == 0) {  // bake song
     confirmation = true;
     PrintPopup();
-  } else {
+  }
+
+  else {  // not bake
 
     if (mode != 2) oled.setCursorXY(0, 0);
     else oled.setCursorXY(5, 0);
@@ -2363,7 +2463,7 @@ void PrintPopup() {  // print popups - menu 4
     else if (savemode == 2) {  // new
       if (!drumModeSelect) oled.printF(printnext);
       else oled.printF(space);
-      oled.print(F("SONG "));
+      oled.print(F("NOTE "));
       oled.setCursorXY(28, 48);
       if (drumModeSelect) oled.printF(printnext);
       else oled.printF(space);
@@ -2422,6 +2522,7 @@ void PrintBeatEditor() {  // print beat editor - menu 5
       break;
     }
     char letter = 'A' + i;
+    if (!DrumNotesMixer[i]) oled.invertText(1);
     oled.print(letter);
     oled.invertText(1);
     oled.print(F(";"));
@@ -2445,7 +2546,7 @@ void PrintBeatEditor() {  // print beat editor - menu 5
   }
 }
 
-void LoadSave(uint8_t mode, uint8_t number) {  // (bake/clone/new/save/load/delete, slot number 0-5)
+void LoadSave(uint8_t mode, uint8_t number) {  // (bake/clone/new/save/load/delete, slot number 0-59)
 
   if (mode == 0) {  // bake song
     BakeSequence();
@@ -2465,6 +2566,7 @@ void LoadSave(uint8_t mode, uint8_t number) {  // (bake/clone/new/save/load/dele
 
     playing = false;
     StepSpeed = 2;
+    trigMode = 0;
     noteLengthSelect = 3;
     lockpattern = false;
     pattern = 0;
@@ -2662,10 +2764,10 @@ void ButtonsCommands(bool anypressed) {  // manage buttons's commands
 
   StartScreenTimer = true;  // if any button is pressed or released, start the screen timer
 
-  if (!redtristate) redtristate = 1;
-  if (!yellowtristate) yellowtristate = 1;
-  if (!greentristate) greentristate = 1;  // set greentristate to null
-  if (!bluetristate) bluetristate = 1;
+  if (!redtristate) redtristate = 1;        // set redtristate to null
+  if (!yellowtristate) yellowtristate = 1;  // set yellowtristate to null
+  if (!greentristate) greentristate = 1;    // set greentristate to null
+  if (!bluetristate) bluetristate = 1;      // set bluetristate to null
 
   if (menunumber == 0) {  // main screen - menu 0
 
@@ -2867,11 +2969,19 @@ void ButtonsCommands(bool anypressed) {  // manage buttons's commands
       }
 
       else if (menuitem == 1) {
-        newcurrentSeq = currentSeq;
-        modeselect = premodeselect;
+        if (premodeselect != modeselect) {
+          newcurrentSeq = currentSeq;
+
+          if (!lockmute) {
+            muted = false;
+          } else if (premodeselect == 3) lockmute = false;
+
+          modeselect = premodeselect;
+        }
         ScreenBlink();
         PrintMainScreen();
         if (lockmute) safedigitalWrite(blueLED, HIGH);
+
       }
 
       else if (menuitem == 4) TapTempo();
