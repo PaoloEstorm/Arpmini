@@ -2,7 +2,7 @@
  *  @file       Arpmini.ino
  *  Project     Estorm - Arpmini
  *  @brief      MIDI Sequencer & Arpeggiator
- *  @version    2.23
+ *  @version    2.24
  *  @author     Paolo Estorm
  *  @date       06/14/25
  *  @license    GPL v3.0 
@@ -25,7 +25,7 @@
 // https://brendanclarke.com/wp/2014/04/23/arduino-based-midi-sequencer/
 
 // system
-const char version[] PROGMEM = "2.23";
+const char version[] PROGMEM = "2.24";
 #include "Vocabulary.h"
 #include "Random8.h"
 Random8 Random;
@@ -125,7 +125,7 @@ uint8_t flop = 6;                  // part of the frameperstep's flipflop
 bool swing = false;                // is swing enabled?
 uint8_t BPM = 120;                 // beats per minute for internalclock - min 20, max 250 bpm
 bool playing = false;              // is the sequencer playing?
-uint8_t snapmode = 1;              // when play/stop the next sequence in live mode. 0=pattern, 1=up-beat, 2=beat
+uint8_t snapmode = 0;              // when play/stop the next sequence in live mode. 0=pattern, 1=up-beat, 2=beat
 bool start = false;                // dirty fix for a ableton live 10 bug. becomes true once at sequence start and send a sync command
 const uint8_t iterations = 8;      // how many BPM "samples" to averege out for the tap tempo. more = more accurate
 uint8_t BPMbuffer[iterations];     // BPM "samples" buffer for tap tempo
@@ -164,6 +164,7 @@ int8_t pattern = 0;                              // currently playing pattern
 bool chainrec = false;                           // sequential recording in song mode?
 bool lockpattern = false;                        // block the current pattern from sequencing
 bool nopattern = false;                          // inhibit current pattern from sequencing only once
+bool updatePatternCursor = false;                // update pattern cursor avoiding indirect recursive call
 
 // notes
 int8_t pitch = 0;                // pitch transposition: -12 to +12
@@ -330,6 +331,12 @@ void SetBPM(uint8_t tempo) {  // change Timer1 speed to match BPM (20-250)
 }
 
 void TCTask() {  // time critical task
+  // read incoming MIDI data
+  MIDI.read();
+  MIDI2.read();
+}
+
+void TCTask2() {  // time critical task 2
 
   if (stepEnable) {  // check if is time to run the internal clock
     stepEnable = false;
@@ -337,24 +344,27 @@ void TCTask() {  // time critical task
   }
 }
 
-void TCTask2() {  // time critical task 2
-  // read incoming MIDI data
-  MIDI.read();
-  MIDI2.read();
+void PrintLiveObjects() {  // update screen objects avoiding indirect recursive call
+
+  if (updatePatternCursor) {
+    updatePatternCursor = false;
+    PrintPatternSequenceCursor();
+  }
 }
 
 void loop() {  // run continuously
 
-  TCTask();
-  TCTask2();
+  TCTask();   // read incoming MIDI data
+  TCTask2();  // check if is time to run the internal clock
 
-  if (Serial.available()) {
-    PcSync(Serial.read());
+  if (Serial.available()) {  // if connected
+    PcSync(Serial.read());   // exchange data with PC (Arpmini Editor)
   }
 
   DebounceButtons();
   ScreenOnTimer();
   GoToMenuTimer();
+  PrintLiveObjects();  // update screen objects
 }
 
 void ResetEEPROM() {  // initialize the EEPROM with default values
@@ -382,7 +392,7 @@ unsigned int eepromaddress(unsigned int address, uint8_t slot) {  // calculate e
   return (slotsize * slot) + address;
 }
 
-void PcSync(uint8_t data) {  // exchange data with PC
+void PcSync(uint8_t data) {  // exchange data with PC (Arpmini Editor)
 
   static uint8_t enable = 0;  // 0=none, 1=recieved command, 2=recieved address
   static uint8_t mode = 0;
@@ -606,7 +616,7 @@ void Bip(uint8_t type) {  // bip sounds
   if (sound) {
     if (uisound) {
       if (type == 1) tone8.tone(3136, 1);        // click
-      else if (type == 2) tone8.tone(2637, 10);  // startup/confirmation
+      else if (type == 2) tone8.tone(2637, 8);  // startup/confirmation
     }
     if (type == 3) tone8.tone(3136, 5);       // metronome
     else if (type == 4) tone8.tone(2349, 5);  // metronome
@@ -730,6 +740,8 @@ uint8_t SetNoteLength() {  // set the note duration
   static uint8_t noteLength = 30;
   static const uint8_t noteLengths[] = { 55, 35, 30, 25, 20, 15 };  // noteLengths
 
+  if (FixSync) return (noteLength);
+
   if (countTicks == 0) {
     if (noteLengthSelect == 0) {  // random
       noteLength = noteLengths[Random.get(0, longRandomLength + 4)];
@@ -826,7 +838,7 @@ void HandleStep() {  // step sequencer
         if (currentSeq != newcurrentSeq) {
           currentSeq = newcurrentSeq;
           muted = false;
-          if (menunumber == 0) PrintPatternSequenceCursor();
+          if (menunumber == 0) updatePatternCursor = true;  // update screen
         }
       }
     }
@@ -900,7 +912,7 @@ void HandlePattern() {  // pattern sequencer in songmode
 
   if (songPattern[pattern]) currentSeq = songPattern[pattern] - 1;  // if current pattern is active set the sequence
 
-  if (menunumber == 0) PrintPatternSequenceCursor();  // update screen
+  if (menunumber == 0) updatePatternCursor = true;  // update screen
 }
 
 void Metronome() {  // manage the metronome
@@ -972,12 +984,12 @@ void Startposition() {  // called every time the sequencing starts or stops
 
   if (!FixSync) {
     GlobalStep = -1;
-    countBeat = -1;
     countTicks = -1;
   }
 
   AllNotesOff();
 
+  countBeat = -1;
   arpcount = 0;
   countStep = -1;
   flipflopEnable = false;
@@ -1443,11 +1455,17 @@ void PrintMainScreen() {  // print menu 0 to the screen
   menunumber = 0;
 
   oled.clear();
+  oled.drawRect(0, 0, 127, 8);
+
   PrintTitle();
-
-  if (modeselect < 2) oled.setCursorXY(4, 0);
-
-  oled.printlnF(modenames[modeselect]);
+  if (modeselect < 2) oled.shiftX();
+  oled.shiftX();
+  oled.printF(modes[modeselect]);
+  oled.shiftX();
+  if (drumMode) oled.printF(drumicon);
+  else oled.printF(noteicon);
+  oled.shiftX();
+  oled.printlnF(printmode);
   oled.invertText(0);
 
   if (modeselect == 0) {  // arp mode screen
@@ -1692,7 +1710,7 @@ void PrintMenu(uint8_t item) {  // print main menu - menu 1
   }
 }
 
-void SubmenuSettings(uint8_t item, uint8_t dir) {  // print & handles changing settings in submenu - menu 2
+void SubmenuSettings(uint8_t item, uint8_t dir) {  // navgate, change & print settings in submenu (dir 0: null, dir 1: down, 2: up) - menu 2
 
   bool keyEnable = dir;
 
@@ -2190,7 +2208,10 @@ void SubmenuSettings(uint8_t item, uint8_t dir) {  // print & handles changing s
         //-----BUTTONS COMMANDS----//
         if (keyEnable) {
           if (dir == goUp) strum = true;
-          else strum = false;
+          else {
+            muted = false;
+            strum = false;
+          }
         }
         //-----SCREEN COMMANDS----//
         if (strum) oled.printF(printstrum);
@@ -2510,8 +2531,8 @@ void PrintBeatEditor() {  // print beat editor - menu 5
   oled.printF(space);
 
   for (uint8_t i = 0; i < 4; i++) {  // title window view
-    if (i == window) oled.print(F("["));
-    else oled.print(F("]"));
+    if (i == window) oled.printF(fullbox);
+    else oled.printF(emptybox);
   }
 
   oled.println();  // go down
@@ -2534,11 +2555,11 @@ void PrintBeatEditor() {  // print beat editor - menu 5
       }
       bool pos = (colum == j && row == i);
       if ((bitRead(noteSeq[currentSeqEdit][j], i)) == 0) {
-        if (pos) oled.print(F(")"));
-        else oled.print(F("]"));
+        if (pos) oled.printF(emptyselectedbox);
+        else oled.printF(emptybox);
       } else {
-        if (pos) oled.print(F("("));
-        else oled.print(F("["));
+        if (pos) oled.printF(fullselectedbox);
+        else oled.printF(fullbox);
       }
     }
     oled.invertText(0);
