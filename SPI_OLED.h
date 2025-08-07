@@ -15,7 +15,7 @@
 #define OLED_DISPLAY_ON 0xAF
 #define OLED_CONTRAST 0x81
 
-extern void TCTask();
+extern void TCTask2();
 
 // startup sequence
 const uint8_t _oled_init[] PROGMEM = {
@@ -72,14 +72,12 @@ public:
 
   void clear(uint8_t x0, uint8_t y0, uint8_t x1, uint8_t y1) {
 
-    y0 >>= 3;
-    y1 >>= 3;
-    setWindow(x0, y0, x1, y1);
-    PORTF |= (1 << PF5);  // pin 20 HIGH (DC)
-    for (uint8_t x = x0; x <= x1; x++)
-      for (uint8_t y = y0; y <= y1; y++)
-        SPI_write(0x00);
-    setCursorXY(_x, _y);
+    fill(x0, y0, x1, y1, 0x00);
+  }
+
+  void drawRect(uint8_t x0, uint8_t y0, uint8_t x1, uint8_t y1) {
+
+    fill(x0, y0, x1, y1, 0xff);
   }
 
   void setContrast(uint8_t value) {
@@ -218,11 +216,23 @@ private:
     SPI_write(y1);
   }
 
+  void fill(uint8_t x0, uint8_t y0, uint8_t x1, uint8_t y1, uint8_t fill) {
+
+    y0 >>= 3;
+    y1 >>= 3;
+    setWindow(x0, y0, x1, y1);
+    PORTF |= (1 << PF5);  // pin 20 HIGH (DC)
+    for (uint8_t x = x0; x <= x1; x++)
+      for (uint8_t y = y0; y <= y1; y++)
+        SPI_write(fill);
+    setCursorXY(_x, _y);
+  }
+
   void SPI_write(uint8_t data) {
 
     SPDR = data;  // Load data into buffer
     while (!(SPSR & (1 << SPIF))) {
-      TCTask();  // <-- do this while waiting for the writing to complete
+      TCTask2();  // <-- do this while waiting for the writing to complete
     }
   }
 
