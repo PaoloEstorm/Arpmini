@@ -1,4 +1,3 @@
-#include <avr/pgmspace.h>
 
 // vocabulary
 const char space[] PROGMEM = " ";
@@ -51,6 +50,12 @@ const char always[] PROGMEM = "ALWAYS";
 const char printkeyb[] PROGMEM = "KEYB";
 const char printtransp[] PROGMEM = "TRANSP.";
 const char printstrum[] PROGMEM = "STRUM";
+const char fullbox[] PROGMEM = "[";
+const char emptybox[] PROGMEM = "]";
+const char fullselectedbox[] PROGMEM = "(";
+const char emptyselectedbox[] PROGMEM = ")";
+const char noteicon[] PROGMEM = "'";
+const char drumicon[] PROGMEM = ",";
 
 const char noteNames[][3] PROGMEM = {
   "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"
@@ -72,10 +77,6 @@ const char arpmodes[][8] PROGMEM = {
 
 const char speeds[][5] PROGMEM = {
   "1/32", "1/24", "1/16", "1/12", "1/8", "1/6", "1/4"     
-};
-
-const char modenames[][12] PROGMEM = {
-  " ARP MODE ", " REC MODE ", " SONG MODE ", " LIVE MODE "
 };
 
 const char trigmodes[][7] PROGMEM = {
