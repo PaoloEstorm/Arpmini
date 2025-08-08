@@ -50,7 +50,7 @@ Major pentatonic, Minor pentatonic, Major, Minor, Harmonic Minor, Blues, Locrian
 
 ## Arpmini Modes
 
-<img width="1985" height="1986" alt="Modes" src="https://github.com/user-attachments/assets/2d0461d1-6c39-44a0-93d7-e996d8ff35f7" />
+<img width="1489" height="1489" alt="Modes" src="https://github.com/user-attachments/assets/9786e34b-4c13-4706-99fa-8a5223f4cc5a" />
 
 Arp Mode: Arpeggiates the played notes based on the selected arpeggio mode.
 
