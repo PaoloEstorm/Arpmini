@@ -76,7 +76,7 @@ const char arpmodes[][8] PROGMEM = {
 };
 
 const char speeds[][5] PROGMEM = {
-  "1/32", "1/24", "1/16", "1/12", "1/8", "1/6", "1/4"     
+  "1/48", "1/32", "1/24", "1/16", "1/12", "1/8", "1/6", "1/4"     
 };
 
 const char trigmodes[][7] PROGMEM = {
