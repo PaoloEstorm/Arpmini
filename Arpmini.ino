@@ -2,7 +2,7 @@
  *  @file       Arpmini.ino
  *  Project     Estorm - Arpmini
  *  @brief      MIDI Sequencer & Arpeggiator
- *  @version    2.24
+ *  @version    2.25
  *  @author     Paolo Estorm
  *  @date       06/14/25
  *  @license    GPL v3.0 
@@ -25,7 +25,7 @@
 // https://brendanclarke.com/wp/2014/04/23/arduino-based-midi-sequencer/
 
 // system
-const char version[] PROGMEM = "2.24";
+const char version[] PROGMEM = "2.25";
 #include "Vocabulary.h"
 #include "Random8.h"
 Random8 Random;
@@ -108,7 +108,7 @@ bool cloneCur = false;       // cursor position in the clone seq submenu
 // time keeping
 uint8_t clockTimeout;              // variable for keeping track of external/internal clock
 bool internalClock = true;         // is the sequencer using the internal clock?
-uint8_t StepSpeed = 2;             // 0=1/32, 1=1/24, 2=1/16, 3=1/12, 4=1/8, 5=1/6, 6=1/4
+uint8_t StepSpeed = 3;             // 0=1/48, 1=1/32, 2=1/24, 3=1/16, 4=1/12, 5=1/8, 6=1/6, 7=1/4
 bool FixSync = false;              // tries to re-allign the sequence when changing step-speeds
 bool flipflopEnable;               // part of the frameperstep flipflop
 uint8_t sendrealtime = 1;          // send midi realtime messages. 0=off, 1=on (@internalclock, only if playing), 2=on (@internalclock, always)
@@ -687,7 +687,7 @@ void RunClock() {  // main clock
     if ((modeselect != 3 && clockenable) || modeselect == 3) HandleStep();
   }
 
-  if (countTicks == 2 && playing) {  // turn yellowLED off before 2 ticks - Tempo indicator
+  if (((countTicks == 1 && !StepSpeed) || (countTicks == 2 && StepSpeed)) && playing) {  // turn yellowLED off before 1/2 ticks - Tempo indicator
 
     if ((modeselect != 3 && (menunumber == 0 || menunumber == 5)) || (modeselect == 3 && menunumber == 5)) safedigitalWrite(yellowLED, LOW);
     else if (modeselect == 3 && menunumber == 0) AllLedsOff();
@@ -711,10 +711,10 @@ void RunClock() {  // main clock
 
 void SetTicksPerStep() {  // set ticksPerStep values
 
-  static const uint8_t noSwingValues[] = { 3, 4, 6, 8, 12, 16, 24 };
-  static const uint8_t flipSwing[] = { 4, 4, 8, 8, 16, 16, 32 };
-  static const uint8_t flopSwing[] = { 2, 4, 4, 8, 8, 16, 16 };
-  static const uint8_t globalDiv[] = { 8, 6, 4, 3, 2, 3, 2 };
+  static const uint8_t noSwingValues[] = {2, 3, 4, 6, 8, 12, 16, 24 };
+      static const uint8_t flipSwing[] = {2, 4, 4, 8, 8, 16, 16, 32 };
+      static const uint8_t flopSwing[] = {2, 2, 4, 4, 8, 8, 16, 16 };
+      static const uint8_t globalDiv[] = {12, 8, 6, 4, 3, 2, 3, 2 };
 
   if (swing) {
     flip = flipSwing[StepSpeed];
@@ -748,17 +748,18 @@ uint8_t SetNoteLength() {  // set the note duration
     } else noteLength = noteLengths[noteLengthSelect - 1];
   } else return (noteLength);
 
-  if (swing && (StepSpeed % 2 == 0)) {
+  if (swing && !(StepSpeed % 2 == 0)) {
     if (flipflopEnable) noteLength = noteLength - 4;
     else noteLength = noteLength + 10;
   }
 
-  if (StepSpeed == 0) noteLength = noteLength * 2;             // 1/32
-  else if (StepSpeed == 1) noteLength = noteLength + 10;       // 1/24
-  else if (StepSpeed == 3) noteLength = noteLength - 5;        // 1/12
-  else if (StepSpeed == 4) noteLength = noteLength / 2;        // 1/8
-  else if (StepSpeed == 5) noteLength = (noteLength / 3) + 1;  // 1/6
-  else if (StepSpeed == 6) noteLength = noteLength / 4;        // 1/4
+  if (StepSpeed == 0) noteLength = noteLength * 3;             // 1/48
+  else if (StepSpeed == 1) noteLength = noteLength * 2;        // 1/32
+  else if (StepSpeed == 2) noteLength = noteLength + 10;       // 1/24
+  else if (StepSpeed == 4) noteLength = noteLength - 5;        // 1/12
+  else if (StepSpeed == 5) noteLength = noteLength / 2;        // 1/8
+  else if (StepSpeed == 6) noteLength = (noteLength / 3) + 1;  // 1/6
+  else if (StepSpeed == 7) noteLength = noteLength / 4;        // 1/4
 
   return (noteLength);
 }
@@ -2105,7 +2106,7 @@ void SubmenuSettings(uint8_t item, uint8_t dir) {  // navgate, change & print se
           if (dir == goUp) {
             if (StepSpeed > 0) StepSpeed--;
           } else {
-            if (StepSpeed < 6) StepSpeed++;
+            if (StepSpeed < 7) StepSpeed++;
           }
           if (playing) FixSync = true;
         } else {
@@ -2586,7 +2587,7 @@ void LoadSave(uint8_t mode, uint8_t number) {  // (bake/clone/new/save/load/dele
   else if (mode == 2) {  // new song
 
     playing = false;
-    StepSpeed = 2;
+    StepSpeed = 3;
     trigMode = 0;
     noteLengthSelect = 3;
     lockpattern = false;
