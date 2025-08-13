@@ -2,7 +2,7 @@
  *  @file       Arpmini.ino
  *  Project     Estorm - Arpmini
  *  @brief      MIDI Sequencer & Arpeggiator
- *  @version    2.25
+ *  @version    2.26
  *  @author     Paolo Estorm
  *  @date       06/14/25
  *  @license    GPL v3.0 
@@ -25,7 +25,7 @@
 // https://brendanclarke.com/wp/2014/04/23/arduino-based-midi-sequencer/
 
 // system
-const char version[] PROGMEM = "2.25";
+const char version[] PROGMEM = "2.26";
 #include "Vocabulary.h"
 #include "Random8.h"
 Random8 Random;
@@ -58,7 +58,7 @@ SPI_OLED oled;                 // screen initialization
 bool StartScreenTimer = true;  // activate the screen-on timer
 
 // memory
-#define memorySlots 60   // max number of songs (absolute max is 117)
+#define memorySlots 60   // max number of songs (absolute max is 116)
 #include "I2C_EEPROM.h"  // external eeprom for songs
 I2C_EEPROM EEPROM2;
 
@@ -92,7 +92,7 @@ uint8_t mapButtonSelect = 0;     // 0=red, 1=yellow, 2=blue, 3=green
 
 // menu
 uint8_t menuitem = 2;        // is the number associated with every voice in the main menu. 0 to 18
-uint8_t menunumber = 0;      // 0=mainscreen, 1=menu, 2=submenu, 3=load\save menu, 4=popup, 5=beat editor
+uint8_t menunumber = 0;      // 0=mainscreen, 1=menu, 2=submenu, 3=load\save menu, 4=popup, 5=beat editor, 6=alert popups
 uint8_t savemode = 0;        // 0=bake, 1=clone, 2=new, 3=save, 4=load, 5=delete
 uint8_t savecurX = 0;        // cursor position in load/save menu 0-5
 uint8_t savepage = 0;        // page number for external eeprom
@@ -615,7 +615,7 @@ void Bip(uint8_t type) {  // bip sounds
 
   if (sound) {
     if (uisound) {
-      if (type == 1) tone8.tone(3136, 1);        // click
+      if (type == 1) tone8.tone(3136, 1);       // click
       else if (type == 2) tone8.tone(2637, 8);  // startup/confirmation
     }
     if (type == 3) tone8.tone(3136, 5);       // metronome
@@ -689,7 +689,7 @@ void RunClock() {  // main clock
 
   if (((countTicks == 1 && !StepSpeed) || (countTicks == 2 && StepSpeed)) && playing) {  // turn yellowLED off before 1/2 ticks - Tempo indicator
 
-    if ((modeselect != 3 && (menunumber == 0 || menunumber == 5)) || (modeselect == 3 && menunumber == 5)) safedigitalWrite(yellowLED, LOW);
+    if ((modeselect != 3 && (menunumber == 0 || menunumber > 3)) || (modeselect == 3 && menunumber == 5)) safedigitalWrite(yellowLED, LOW);
     else if (modeselect == 3 && menunumber == 0) AllLedsOff();
   }
 
@@ -711,10 +711,10 @@ void RunClock() {  // main clock
 
 void SetTicksPerStep() {  // set ticksPerStep values
 
-  static const uint8_t noSwingValues[] = {2, 3, 4, 6, 8, 12, 16, 24 };
-      static const uint8_t flipSwing[] = {2, 4, 4, 8, 8, 16, 16, 32 };
-      static const uint8_t flopSwing[] = {2, 2, 4, 4, 8, 8, 16, 16 };
-      static const uint8_t globalDiv[] = {12, 8, 6, 4, 3, 2, 3, 2 };
+  static const uint8_t noSwingValues[] = { 2, 3, 4, 6, 8, 12, 16, 24 };
+  static const uint8_t flipSwing[] = { 2, 4, 4, 8, 8, 16, 16, 32 };
+  static const uint8_t flopSwing[] = { 2, 2, 4, 4, 8, 8, 16, 16 };
+  static const uint8_t globalDiv[] = { 12, 8, 6, 4, 3, 2, 3, 2 };
 
   if (swing) {
     flip = flipSwing[StepSpeed];
@@ -894,7 +894,7 @@ void HandleBeat() {  // tempo indicator and metronome
 
   countBeat = (countBeat + 1) % tSignature;
 
-  if (((menunumber == 0 || menunumber == 5) && modeselect != 3) || (menunumber == 5 && modeselect == 3)) {
+  if ((modeselect != 3 && (menunumber == 0 || menunumber > 3)) || (modeselect == 3 && menunumber == 5)) {
     if (playing) safedigitalWrite(yellowLED, HIGH);
   }
 
@@ -947,10 +947,15 @@ void HandleStop() {  // stop the sequence and switch over to internal clock
 
   if (sendrealtime) MIDI.sendRealTime(midi::Stop);
 
-  if (!internalClock) {
-    if (menunumber == 0) {
-      if (modeselect != 3) safedigitalWrite(yellowLED, LOW);  // turn yellowLED off before 2 ticks - Tempo indicator
-      else AllLedsOff();
+  //if (!internalClock) {
+  if (menunumber == 0) {
+    if (modeselect != 3) safedigitalWrite(yellowLED, LOW);  // turn yellowLED off
+    else AllLedsOff();
+    //  }
+
+    if (recording) {
+      recording = false;
+      ManageRecording();
     }
 
     playing = false;
@@ -970,6 +975,11 @@ void StartAndStop() {  // manage starts and stops
         MIDI.sendRealTime(midi::Start);
         start = true;  // to make ableton live 10 happy
       } else MIDI.sendRealTime(midi::Stop);
+    }
+  } else {
+    if (recording) {
+      recording = false;
+      ManageRecording();
     }
   }
 }
@@ -1485,7 +1495,7 @@ void PrintMainScreen() {  // print menu 0 to the screen
     oled.setCursorXY(36, 16);
     oled.printF(seq);
     oled.print(currentSeq + 1);
-    oled.setCursorXY(((seqLength > 9) ? 14 : 18), 32);
+    oled.setCursorXY(((seqLength > 9) ? 15 : 18), 32);
     oled.printF(length);
     oled.shiftX();
     oled.print(seqLength);
@@ -2512,9 +2522,12 @@ void PrintPopup() {  // print popups - menu 4
         }
       }
     }
-  } else {  // inter-recording popup
+  } else {  // recording popup
     menunumber = 4;
-    oled.print(F(" SEQ."));
+    if (!editorPopup) oled.drawRect(28, 32, 100, 40);
+    else oled.clear(28, 32, 100, 40);
+    oled.setCursorXY(36, 32);
+    oled.printF(seq);
     oled.print(newcurrentSeq + 1);
   }
   oled.invertText(0);
@@ -2566,6 +2579,32 @@ void PrintBeatEditor() {  // print beat editor - menu 5
     oled.invertText(0);
     oled.println();  // go down
   }
+}
+
+void PrintAlertPopup(uint8_t txt) {  // print alert popups - menu 6
+
+  menunumber = 6;
+  PrintTitle();
+
+  switch (txt) {
+
+    case 0:
+      oled.setCursorXY(24, 32);
+      oled.print(F(" ERROR!"));  // generic alert
+      break;
+
+    case 1:
+      oled.setCursorXY(24, 32);
+      oled.print(F(" MIXER!"));  // recording while drumKeybMode=mixer not allowed
+      break;
+
+    case 2:
+      oled.setCursorXY(5, 32);
+      oled.print(F(" NOT PLAY!"));  // recording while externalsync and not playing not allowed
+      break;
+  }
+
+  oled.invertText(0);
 }
 
 void LoadSave(uint8_t mode, uint8_t number) {  // (bake/clone/new/save/load/delete, slot number 0-59)
@@ -2877,16 +2916,21 @@ void ButtonsCommands(bool anypressed) {  // manage buttons's commands
 
         if (!blueispressed && newredstate) {  // start/stop recording
 
-          if ((modeselect == 2 && !playing && !lockpattern) || (modeselect == 0)) {
-            if (!recording) {
-              PrintPopup();
+          if ((!playing && internalClock || playing) && (!drumMode || drumMode && drumKeybMode != 3)) {
+            if ((modeselect == 2 && !playing && !lockpattern) || (modeselect == 0)) {
+              if (!recording) {
+                PrintPopup();
+              } else {
+                recording = false;
+                ManageRecording();
+              }
             } else {
-              recording = false;
+              recording = !recording;
               ManageRecording();
             }
           } else {
-            recording = !recording;
-            ManageRecording();
+            if (drumMode && drumKeybMode == 3) PrintAlertPopup(1);
+            else PrintAlertPopup(2);
           }
         }
       }
@@ -3116,7 +3160,7 @@ void ButtonsCommands(bool anypressed) {  // manage buttons's commands
 
   }
 
-  else if (menunumber == 4) {  // inter-recording popup - menu 4
+  else if (menunumber == 4) {  // recording popup - menu 4
 
     if (newbluestate) {  // exit popup
       if (!editorPopup) PrintMainScreen();
@@ -3213,6 +3257,10 @@ void ButtonsCommands(bool anypressed) {  // manage buttons's commands
     if (newbluestate && !greenispressed) {
       PrintMenu(menuitem);
     }
+  }
+
+  else {  // alert popups - menu 6
+    if (anypressed) PrintMainScreen();
   }
 
   if (anypressed) {
