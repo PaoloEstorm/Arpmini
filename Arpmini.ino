@@ -2,7 +2,7 @@
  *  @file       Arpmini.ino
  *  Project     Estorm - Arpmini
  *  @brief      MIDI Sequencer & Arpeggiator
- *  @version    2.27
+ *  @version    2.28
  *  @author     Paolo Estorm
  *  @date       06/14/25
  *  @license    GPL v3.0 
@@ -25,7 +25,7 @@
 // https://brendanclarke.com/wp/2014/04/23/arduino-based-midi-sequencer/
 
 // system
-const char version[] PROGMEM = "2.27";
+const char version[] PROGMEM = "2.28";
 #include "Vocabulary.h"
 #include "Random8.h"
 Random8 Random;
@@ -317,6 +317,7 @@ void safedigitalWrite(uint8_t pin, bool state) {  // avoid digitalwrite and i2c 
 
 void SystemReset() {  // restart system
 
+  asm volatile("clr r27");  // clear register 27 to avoid entering bootloader
   wdt_enable(WDTO_15MS);
   while (1) {}  // wait reset
 }
@@ -332,9 +333,9 @@ void SetBPM(uint8_t tempo) {  // change Timer1 speed to match BPM (20-250)
 }
 
 void TCTask() {  // time critical task
-  // read incoming MIDI data
-  MIDI.read();
-  MIDI2.read();
+
+  MIDI.read();   // read incoming MIDI data, port 1
+  MIDI2.read();  // read incoming MIDI data, port 2
 }
 
 void TCTask2() {  // time critical task 2
