@@ -2,7 +2,7 @@
  *  @file       Arpmini.ino
  *  Project     Estorm - Arpmini
  *  @brief      MIDI Sequencer & Arpeggiator
- *  @version    2.28
+ *  @version    2.29
  *  @author     Paolo Estorm
  *  @date       06/14/25
  *  @license    GPL v3.0 
@@ -25,7 +25,7 @@
 // https://brendanclarke.com/wp/2014/04/23/arduino-based-midi-sequencer/
 
 // system
-const char version[] PROGMEM = "2.28";
+const char version[] PROGMEM = "2.29";
 #include "Vocabulary.h"
 #include "Random8.h"
 Random8 Random;
@@ -2604,9 +2604,10 @@ void PrintBeatEditor() {  // print beat editor - menu 5
 
   oled.printF(space);
 
-  for (uint8_t i = 0; i < 4; i++) {  // title window view
-    if (i == window) oled.printF(fullbox);
-    else oled.printF(emptybox);
+  for (uint8_t i = 0; i < 4; i++) {                     // title window view
+    if (i >= (seqLength + 7) / 8) oled.printF(printx);  // inactive windows
+    else if (i == window) oled.printF(fullbox);         // current window
+    else oled.printF(emptybox);                         // other active windows
   }
 
   oled.println();  // go down
