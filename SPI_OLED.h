@@ -1,3 +1,4 @@
+
 // Based on "GyverOled" library by Alex Gyver, alex@alexgyver.ru
 // https://alexgyver.ru/
 
@@ -45,21 +46,22 @@ public:
 
   void init() {
 
+    DDRB |= (1 << PB0);   // pin 17 as OUTPUT (SS)
+    PORTB |= (1 << PB0);  // pin 17 HIGH (SS)
+
+    DDRB |= (1 << PB2) | (1 << PB1);  // set MOSI and SCK as OUTPUT
+    SPCR = (1 << SPE) | (1 << MSTR);  // enable SPI, master
+    SPSR = (1 << SPI2X);              // double speed, f/2 8MHz
+
     DDRF |= (1 << PF6) | (1 << PF5);  // pin 19 & 20 as OUTPUT (RST & DC)
 
     PORTF &= ~(1 << PF6);  // pin 19 LOW (RST)
-    delayMicroseconds(400);
+    delayMicroseconds(1000);
     PORTF |= (1 << PF6);  // pin 19 HIGH (RST)
 
-    PORTB |= (1 << PB0);  // pin 17 HIGH (enable pull-up) (SS)
-    DDRB &= ~(1 << PB0);  // pin 17 as INPUT (SS)
-
-    DDRB |= (1 << PB2) | (1 << PB1);  // set MOSI and SCK as OUTPUT
-    SPCR = (1 << SPE) | (1 << MSTR);  // Enable SPI, Master, f/4
-    SPSR = (1 << SPI2X);              // Double speed, f/2 → 8 MHz
-
     PORTF &= ~(1 << PF5);  // pin 20 LOW (DC)
-    for (uint8_t i = 0; i < 19; i++) SPI_write(pgm_read_byte(&_oled_init[i]));
+
+    for (uint8_t i = 0; i < 19; i++) SPI_write(pgm_read_byte(&_oled_init[i]));  // send initialization sequence
   }
 
   void clear() {
@@ -85,25 +87,41 @@ public:
     sendCommand(OLED_CONTRAST, value);
   }
 
-  void printF(const char* ptr) {  // print from flash
+  void printPtr(const char* const* table, uint8_t index) {  // print from pointer in PROGMEM
+
+    const char* ptr = (const char*)pgm_read_ptr(&table[index]);
+    printF(ptr);
+  }
+
+  void printF(const char* ptr) {  // print from PROGMEM
 
     char text;
     while ((text = pgm_read_byte(ptr++))) {
-      print(text);
+      write(text);
     }
   }
 
-  void printlnF(const char* ptr) {  // println from flash
+  void printlnF(const char* ptr) {  // println from PROGMEM
 
     printF(ptr);
-    println();
+    write('\n');
   }
 
   void setCursorXY(uint8_t x, uint8_t y) {
 
     _x = x;
     _y = y;
-    setWindowShift(x, y);
+    setWindowShift(_x, _y);
+  }
+
+  void setCursorX(uint8_t x) {
+
+    setCursorXY(x, _y);
+  }
+
+  void shiftX() {
+
+    setCursorXY(_x + 6, _y);
   }
 
   void setSize(uint8_t scale) {
@@ -131,11 +149,6 @@ public:
     SPI_write(cmd2);
   }
 
-  void shiftX() {
-
-    setCursorXY(_x + 6, _y);
-  }
-
 private:
 
   const uint8_t _maxRow = 8 - 1;
@@ -150,19 +163,12 @@ private:
 
   virtual size_t write(uint8_t data) {
 
-    switch (data) {
-      case '\r':
-        _x = 0;
-        setCursorXY(_x, _y);
-        return 1;
-        break;
-
-      case '\n':
-        _y += _scaleY;
-        setCursorXY(_x, _y);
-        return 1;
-        break;
-    }
+    if (data == '\n') {
+      _x = 0;
+      _y += _scaleY;
+      setCursorXY(_x, _y);
+      return 1;
+    } else if (data == '\r') return 1;
 
     PORTF |= (1 << PF5);  // pin 20 HIGH (DC)
 
@@ -170,9 +176,9 @@ private:
       uint8_t bits = getFont(data, col);     // get the font byte
       if (_invState) bits = ~bits;           // invert bits if needed
 
-      if (_scaleX == 1) {  // scale 1: direct output
+      if (_scaleX == 1) {  // scale 1, direct output
         SPI_write(bits);
-      } else {  // scale 2 or 3: stretch the font
+      } else {  // scale 2 or more, stretch the font
 
         uint32_t newData = 0;
         uint8_t mask = (1 << _scaleX) - 1;  // e.g., for _scaleX = 3, mask becomes 0b111
@@ -182,7 +188,7 @@ private:
           }
         }
 
-        // Output newData: split the buffer into 8-bit chunks
+        // Output newData, split the buffer into 8-bit chunks
         for (uint8_t xOffset = 0; xOffset < _scaleX; xOffset++) {
           uint8_t prevData = 0;
           for (uint8_t j = 0; j < _scaleX; j++) {
@@ -218,8 +224,8 @@ private:
 
   void fill(uint8_t x0, uint8_t y0, uint8_t x1, uint8_t y1, uint8_t fill) {
 
-    y0 >>= 3;
-    y1 >>= 3;
+    y0 /= 8;
+    y1 /= 8;
     setWindow(x0, y0, x1, y1);
     PORTF |= (1 << PF5);  // pin 20 HIGH (DC)
     for (uint8_t x = x0; x <= x1; x++)
@@ -230,9 +236,9 @@ private:
 
   void SPI_write(uint8_t data) {
 
-    SPDR = data;  // Load data into buffer
+    SPDR = data;  // load data into buffer
     while (!(SPSR & (1 << SPIF))) {
-      TCTask2();  // <-- do this while waiting for the writing to complete
+      TCTask2();  // <-- do this while waiting for writing to complete
     }
   }
 
