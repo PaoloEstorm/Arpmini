@@ -1,53 +1,54 @@
-#include "Arduino.h"
+#include <Arduino.h>
 
-volatile long timer_toggle_count;
+volatile long _number_toggles;
 
 ISR(TIMER3_COMPA_vect) {
 
-  if (timer_toggle_count != 0) {
-
-    PORTF ^= (1 << PF4);  // toggle pin 21 (A3) (square wave)
-
-    if (timer_toggle_count > 0)
-      timer_toggle_count--;
+  if (_number_toggles) {
+    PORTF ^= (1 << PF4);   // toggle pin 21 (A3) (square wave)
+    _number_toggles--;  // decrease remaining toggles
   } else {
-    bitClear(TIMSK3, OCIE3A);
-    PORTF &= ~(1 << PF4);  // set pin 21 (A3) LOW
+    bitClear(TIMSK3, OCIE3A);  // disable timer
+    PORTF &= ~(1 << PF4);      // set pin 21 (A3) LOW
   }
 }
 
 class Tone8 {
 public:
 
-  void tone(unsigned int frequency, uint8_t duration) {
+  void init() {  // speaker initialization
 
-    uint8_t prescalarbits = 0b001;
-    long toggle_count = 0;
-    uint32_t ocr = F_CPU / frequency / 2 - 1;
-
-    toneBegin();
-
-    if (ocr > 0xffff) {
-      ocr = F_CPU / frequency / 2 / 64 - 1;
-      prescalarbits = 0b011;
-    }
-
-    TCCR3B = (TCCR3B & 0b11111000) | prescalarbits;
-
-    toggle_count = 2 * frequency * duration / 1000;  // calculate the toggle count
-
-    OCR3A = ocr;
-    timer_toggle_count = toggle_count;
-    bitSet(TIMSK3, OCIE3A);
+    DDRF |= (1 << PF4);                            // set pin 21 (A3) as output
+    PORTF &= ~(1 << PF4);                          // set pin 21 (A3) LOW
+    TCCR3B = (TCCR3B & 0b11111000) | (1 << CS30);  // prescaler = none
+    TCCR3B |= (1 << WGM32);                        // set CTC mode (WGM32 = 1)
+    TCCR3A = 0;                                    // reset count
   }
 
-private:
+  void tone(uint32_t frequency, uint8_t duration) {  // play tune
 
-  void toneBegin() {
-    
-    TCCR3A = 0;
-    TCCR3B = 0;
-    bitSet(TCCR3B, WGM32);
-    bitSet(TCCR3B, CS30);
+    long toggle_count = 0;
+    uint16_t ocr = F_CPU / frequency / 2 - 1;
+
+    toggle_count = 2 * frequency * (uint32_t)duration / 1000;  // calculate the toggle count
+    OCR3A = ocr;
+    _number_toggles = toggle_count;
+    bitSet(TIMSK3, OCIE3A);  // enable timer
+  }
+
+  uint16_t midiToFreq(uint8_t note) {  // convert MIDI note to frequency
+
+    // Base frequencies
+    static const uint16_t freqs[12] PROGMEM = {
+      261, 277, 293, 311, 329, 349,
+      370, 392, 415, 440, 466, 494
+    };
+
+    int8_t octave = (note / 12) - 5;
+    uint16_t base = pgm_read_word(&freqs[note % 12]);
+
+    if (octave > 0) return base << octave;   // up = multiply by 2^octave
+    if (octave < 0) return base >> -octave;  // down = divide by 2^(-octave)
+    return base;
   }
 };
