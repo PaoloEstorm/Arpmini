@@ -25,7 +25,7 @@ Four backlit buttons, mappable and controllable via MIDI CC from an external MID
 
 32KB of memory to store up to 60 songs and various global settings
 
-Import/export songs between Arpmini and your computer using [Arpmini Editor](https://github.com/PaoloEstorm/Arpmini-Editor)
+# Import/export songs between Arpmini and your computer using [Arpmini Editor](https://github.com/PaoloEstorm/Arpmini-Editor)
 
 Built-in speaker for acoustic feedback and metronome
 
