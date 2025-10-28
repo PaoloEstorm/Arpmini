@@ -254,7 +254,7 @@ Flip the assembly face down and screw in two of the M3 screws (14mm long) into t
 ![IMG_7748](https://github.com/user-attachments/assets/b718567b-5d1c-443e-a9b2-a7956eafc401)
 
 Arpmini assembly is now complete!
-In the next steps, stickers can be applied, but this is optional and purely for aesthetics.
+In the next step, I will apply the labels, but this is optional and purely for aesthetic purposes.
 
 ![IMG_8023](https://github.com/user-attachments/assets/4e788e25-81f3-47b9-bcca-e37a082cc948)
 ![IMG_8024](https://github.com/user-attachments/assets/5634e9f3-d043-4f46-a627-b255b7435f5b)
