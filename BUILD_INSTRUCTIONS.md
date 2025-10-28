@@ -1,3 +1,5 @@
+# Arpmini Assembly Guide
+
 ![IMG_7627](https://github.com/user-attachments/assets/04d9ebf9-eb3a-4e3d-8a49-5158be56317a)
 
 All the components required to assemble Arpmini, including the 3D model for the case, are listed in the main repository.
@@ -190,26 +192,69 @@ After making sure the two boards are properly aligned and parallel to each other
 
 Connect Arpmini to your computer using a USB-C cable.
 A red LED between the main board and the Pro Micro should light up, indicating that the bootloader is ready to receive the firmware.
+
 Download the full [Arpmini](https://github.com/PaoloEstorm/Arpmini) project and open the Arpmini.ino file with the Arduino IDE.
-Make sure Arpmini is selected under Tools → Board → Arpmini Core → Arpmini, then click Upload.
+
+Make sure Arpmini is selected under Tools -> Board -> Arpmini Core -> Arpmini, then click Upload.
+
 During the upload, press the yellow and blue buttons on Arpmini simultaneously to start the EEPROM initialization procedure.
+
 If you miss the timing, you can still initialize the EEPROM by unplugging and reconnecting Arpmini while holding both buttons.
+
 For this first upload, selecting the serial port is not necessary/possible, but for future uploads you will need to choose Arpmini from the list of available serial ports.
 
 ![IMG_7720](https://github.com/user-attachments/assets/e186841a-647b-47e8-9d4e-999f45c23eb7)
 ![IMG_7727](https://github.com/user-attachments/assets/537b330b-dbcc-40eb-8e08-a704e3a369d0)
+
+
+After installing the firmware, check that the screen works properly, each button lights up when pressed, and the buzzer produces sound.
+If everything functions correctly, Arpmini is ready! Otherwise, inspect the solder joints connecting the two boards to identify any potential issues.
+
 ![IMG_7729](https://github.com/user-attachments/assets/2981ef82-cee0-4627-8057-78668a46a3c2)
+
+Now proceed with assembling the 3D-printed case using the [model](https://github.com/PaoloEstorm/Arpmini/blob/main/extras/Arpmini%201.65%20v3.stl) provided in the main project.
+
 ![IMG_7730](https://github.com/user-attachments/assets/dc0bfbf7-5828-45f5-a514-f3a7d7a30472)
+
+rest the brass inserts into the dedicated slots on the inner side of the front panel, without pressing them in yet.
+
 ![IMG_7731](https://github.com/user-attachments/assets/bc4d3b51-80ed-4a1d-9ac3-41e64aefe49b)
 ![IMG_7734](https://github.com/user-attachments/assets/c1323db4-8425-4111-8c77-7adec7176eba)
+
+Using a hot soldering iron tip, gently heat the brass insert while applying light pressure.
+The insert will begin to sink in once it reaches the temperature needed to melt the plastic (PLA in this case).
+Avoid pressing too hard if it doesn’t go in; instead, slightly increase the soldering iron temperature if possible.
+
 ![IMG_7737](https://github.com/user-attachments/assets/a486e447-415a-4313-9520-ea652cf4cbe6)
 ![IMG_7739](https://github.com/user-attachments/assets/9c2423d8-51bc-42ef-a478-fd3f135873e2)
+
+The inserts should sit flush with their slots or be slightly recessed.
+Avoid heating them for too long, as excessive heat may deform the surrounding plastic.
+
 ![IMG_7740](https://github.com/user-attachments/assets/edb1ea13-3468-4977-8b5d-f376edd85b41)
 ![IMG_7741](https://github.com/user-attachments/assets/2293a4f5-1f1e-44df-9088-aa001ef058a6)
+
+Now place the PCB into the bottom case, tilting it slightly forward to help align the case openings with the ports.
+Once aligned, apply gentle downward pressure to fit it in place.
+
 ![IMG_7746](https://github.com/user-attachments/assets/4d4d7361-0c79-475a-bc69-44607de547a0)
+
+Now it’s time to remove the protective film from the screen!
+
 ![IMG_7743](https://github.com/user-attachments/assets/78de7b83-86be-4600-9167-77b5e246dfad)
+
+Now, tilt the top cover with the inserts slightly forward and close the enclosure.
+If the inserts were properly installed, the closure should be gapless.
+
 ![IMG_7744](https://github.com/user-attachments/assets/d6dcc56c-a0bc-44a7-b62b-468a843229d0)
+
+Flip the assembly face down and screw in two of the M3 screws (14mm long) into the designated holes.
+
 ![IMG_7748](https://github.com/user-attachments/assets/b718567b-5d1c-443e-a9b2-a7956eafc401)
+
+Arpmini assembly is now complete!
+In the next steps, stickers can be applied, but this is optional and purely for aesthetics.
+
 ![IMG_8023](https://github.com/user-attachments/assets/4e788e25-81f3-47b9-bcca-e37a082cc948)
 ![IMG_8024](https://github.com/user-attachments/assets/5634e9f3-d043-4f46-a627-b255b7435f5b)
 ![IMG_8025](https://github.com/user-attachments/assets/d4ee9466-6e72-46c0-a862-cf5731b6f6be)
@@ -217,3 +262,4 @@ For this first upload, selecting the serial port is not necessary/possible, but 
 ![IMG_8026](https://github.com/user-attachments/assets/7ef160eb-d8d6-415f-baaf-70a2b16bb54f)
 ![IMG_8029](https://github.com/user-attachments/assets/f7b39c10-1613-40fc-a026-46b1098142f5)
 
+Paolo Estorm
