@@ -55,15 +55,19 @@ A simulated demo of Arpmini can be explored on Wokwi via the link https://wokwi.
 
 ## Schematic and PCB design: https://oshwlab.com/estorm/miniseq
 
+### Enclosure 3D model [here](https://github.com/PaoloEstorm/Arpmini/blob/main/extras/Arpmini%201.65%20v3.stl)
+
 Sparkfun Pro Micro: https://amzn.eu/d/if0r67j
 
-Oled Display (blue): https://amzn.eu/d/c0RTBxJ
-
-Oled Display (white): https://amzn.eu/d/1IbVAiL
+Oled Display (blue): https://amzn.eu/d/c0RTBxJ or Oled Display (white): https://amzn.eu/d/1IbVAiL
 
 Buttons: https://amzn.eu/d/7UyjFKx
 
 Buzzer: https://amzn.eu/d/fEAc4UO
+
+Screws: https://amzn.eu/d/e37jcLp
+
+Brass inserts: https://amzn.eu/d/hlBMRaH
 
 Pin Headers: https://amzn.eu/d/9up7Byu
 
