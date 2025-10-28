@@ -73,3 +73,5 @@ Brass inserts: https://amzn.eu/d/hlBMRaH
 
 Pin Headers: https://amzn.eu/d/9up7Byu
 
+3.5mm Stereo jacks: https://amzn.eu/d/9LeCoT1
+
