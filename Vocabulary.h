@@ -103,8 +103,8 @@ const char arpmodes[][8] PROGMEM = {
   "UP", "DOWN", "UP-DOWN", "DOWN-UP", "UP+DOWN", "DOWN+UP", "RANDOM"
 };
 
-const char speeds[][5] PROGMEM = {
-  "1/48", "1/32", "1/24", "1/16", "1/12", "1/8", "1/6", "1/4"
+const char speeds[][3] PROGMEM = {
+  "48", "32", "24", "16", "12", "8", "6", "4"
 };
 
 const char trigmodes[][7] PROGMEM = {
@@ -112,7 +112,7 @@ const char trigmodes[][7] PROGMEM = {
 };
 
 const char snapmodes[][8] PROGMEM = {
-  "PATTERN", "UP-BEAT", "BEAT"
+  "SEQ-END", "ON-BEAT"
 };
 
 const char sortmodes[][10] PROGMEM = {
@@ -125,6 +125,10 @@ const char maxrandomlength[][9] PROGMEM = {
 
 const char pitchmodes[][6] PROGMEM = {
   "PRE-", "ROOT-"
+};
+
+const char jitmodes[][6] PROGMEM = {
+  "RANG ", "PROB ", "MISS "
 };
 
 const char* const drumkeybmodes[] PROGMEM = { printfree, sync, printroll, printmixer };
