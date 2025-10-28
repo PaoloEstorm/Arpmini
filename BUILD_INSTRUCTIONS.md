@@ -161,8 +161,19 @@ Keeping the main board in the same position (with "screen board goes here" facin
 Double-check that it is correctly positioned.
 
 ![IMG_7703](https://github.com/user-attachments/assets/a4c7b1b7-83b0-44f6-9cce-e949ebf807e1)
+
+Solder all the headers on both sides while keeping the two boards pressed firmly together.
+
 ![IMG_7707](https://github.com/user-attachments/assets/67cfb1eb-e7c9-4bbc-b525-f026e6518491)
+
+Solder all the headers on both sides while keeping the two boards pressed firmly together.
+
 ![IMG_7709](https://github.com/user-attachments/assets/78fed8d8-a853-4484-aadc-e220bd4007d9)
+
+Using the flush side cutter, trim the excess length of the soldered pins as much as possible.
+
+Be careful not to damage the PCB traces; a clean trim ensures the enclosure will close properly.
+
 ![IMG_7714](https://github.com/user-attachments/assets/f4b2e234-0aa0-4ba1-a2ce-66dc0961f0c7)
 ![IMG_7712](https://github.com/user-attachments/assets/987b928f-eb54-4839-8028-cfb8a0ad5530)
 ![IMG_7716](https://github.com/user-attachments/assets/5e13078d-aef8-4063-ae00-ae3587a2fa0b)
