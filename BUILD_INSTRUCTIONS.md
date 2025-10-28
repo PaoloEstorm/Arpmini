@@ -44,36 +44,98 @@ Using a breadboard to hold the pins in place during soldering can be very helpfu
 
 Once the headers are soldered, proceed to flash the bootloader specifically designed for Arpmini.
 To connect the board to the ISP, it is recommended to use Dupont jumper cables to avoid soldering.
+
 Alternatively, you can temporarily solder wires on the back side of the board, where the headers were just soldered, while keeping the front headers untouched.
 
 <img width="2264" height="1798" alt="Bootloader_ProMicro_Wiring" src="https://github.com/user-attachments/assets/ba20b7d6-9e37-421d-a5eb-c4a35544c89f" />
 
 Follow the instructions available [here](https://github.com/PaoloEstorm/Arpmini-Core) to install the Arpmini Core in the Arduino IDE.
-Once installed, go to Tools → Board → Arpmini Core → Arpmini.
-Then, in Tools → Programmer, select Arduino as ISP.
-In Tools → Port, select the serial port of your Arduino Uno/Nano/ISP.
+Once installed, go to Tools -> Board -> Arpmini Core -> Arpmini.
+Then, in Tools -> Programmer, select Arduino as ISP.
+In Tools -> Port, select the serial port of your Arduino Uno/Nano/ISP.
 Finally, click Burn Bootloader in the Tools menu.
 If the connections and configuration are correct, the bootloader should be successfully written within a few seconds.
 
 ![IMG_7646](https://github.com/user-attachments/assets/03291826-cb09-4e71-a2a8-52f145933842)
 ![IMG_7647](https://github.com/user-attachments/assets/0e32852d-404c-4311-8915-ffcd07c3279a)
+
+Place the Pro Micro board face down, inserting it into the holes of the main PCB as shown in the photo.
+
 ![IMG_7650](https://github.com/user-attachments/assets/33e11699-e048-4b26-836c-f3d161d3734d)
+
+Double-check the placement before soldering!
+Solder all pins, keeping the PCBs pressed firmly and aligned with each other.
+
+Optionally, you can perform a continuity test between the front and back solder joints of each pin; if the soldering is done correctly, this step should not be necessary.
+
 ![IMG_7652](https://github.com/user-attachments/assets/8e79b010-fd77-4bfc-a82a-4693125db00d)
+
+Using the flush side cutter, trim the excess length of the soldered pins as much as possible.
+
+Be careful not to damage the PCB traces; a clean trim helps prevent short circuits in later assembly steps.
+
 ![IMG_7653](https://github.com/user-attachments/assets/c1932155-c225-4ad5-be54-3c565214b885)
+
 ![IMG_7657](https://github.com/user-attachments/assets/28d37a5f-f4c1-4563-8cac-c5f2120b4382)
 ![IMG_7659](https://github.com/user-attachments/assets/491b0f57-f502-421b-a288-3957fcad1e3c)
+
+Place the buzzer on the top side of the main PCB, observing the correct polarity.
+The hole marked (+) on the PCB must align with the (+) on the buzzer.
+
+Double-check the placement before soldering.
+
 ![IMG_7661](https://github.com/user-attachments/assets/b448fbdd-c14b-48a4-877d-a49efdf321dc)
+
+Using the flush side cutter, trim the excess length of the soldered pins as much as possible.
+
+Be careful not to damage the PCB traces; a clean trim helps prevent short circuits in later assembly steps.
+
 ![IMG_7667](https://github.com/user-attachments/assets/4bda6309-fd57-4795-a7ff-9ff2edc4d1e7)
+
+Now start assembling the screen board.
+Insert the buttons into their respective slots, matching the colors marked on the PCB.
+Pay special attention to the pin marked in red — this is GND and must be inserted towards the inside of the board.
+For all buttons, the red-marked pins should face each other and point inward on the PCB.
+
+To make inserting the pins easier, especially the thin ones for the LEDs, using tweezers can be helpful.
+
 ![IMG_7669](https://github.com/user-attachments/assets/32750358-4f3e-419a-a53b-eff065a1503a)
 ![IMG_7673](https://github.com/user-attachments/assets/432d9384-4308-4f17-a72a-e1d87877dd9c)
+
+Before soldering, double-check that all buttons are correctly positioned.
+
 ![IMG_7674](https://github.com/user-attachments/assets/1f453460-9e71-462a-9525-08c0207658b3)
 ![IMG_7679](https://github.com/user-attachments/assets/ac9103a6-1a66-451a-91db-eedea5f53f19)
+
+Using the flush side cutter, trim the excess length of the soldered pins as much as possible.
+
+Be careful not to damage the PCB traces; a clean trim helps prevent short circuits in later assembly steps.
+
 ![IMG_7681](https://github.com/user-attachments/assets/c639f7f5-001a-402e-81d3-2fbaa15949b7)
 ![IMG_7683](https://github.com/user-attachments/assets/9ff5fab5-2cd6-4ad5-9677-79835a19f7b9)
+
+Using a flush side cutter, cut out two individual male pin headers.
+
 ![IMG_7687](https://github.com/user-attachments/assets/39c085bd-aef0-4c6c-85de-9890de256990)
+
+Place the individual headers into the two holes at the bottom of the PCB, near the yellow and green buttons.
+
 ![IMG_7688](https://github.com/user-attachments/assets/961ead4e-c635-4eb8-87cc-4ea3ac590a2a)
+
+Then, position the screen on top of the headers and into the holes at the top of the PCB.
+Screens usually come with pre-soldered pin headers; if not, cut a 7-pin strip and solder it to the screen PCB as shown in the photo above.
+
+Be careful not to damage any PCB traces.
+I recommend to keep the protective film on the screen to shield it from potential solder flux splashes.
+
 ![IMG_7690](https://github.com/user-attachments/assets/abef9f41-e62f-4ac0-be8a-ee88331872d9)
+
+Flip the board and solder all pins, aiming for clean joints without using too much solder, while keeping the headers pressed firmly against the board.
+
 ![IMG_7694](https://github.com/user-attachments/assets/00bfa75b-9d14-4ca4-8ab5-e0a4124a3792)
+
+Flip the PCB to the button side and solder the two support pins of the screen.
+
 ![IMG_7693](https://github.com/user-attachments/assets/1c134ed6-c941-4669-bf3f-8a0ff4c79794)
 ![IMG_7696](https://github.com/user-attachments/assets/a0040c43-1c60-4200-aec9-8397e92503bd)
 ![IMG_7662](https://github.com/user-attachments/assets/11ebb74f-a361-4c4c-b7c9-dba3bba4affc)
