@@ -2,7 +2,7 @@
  *  @file       Arpmini.ino
  *  Project     Estorm - Arpmini
  *  @brief      MIDI Sequencer & Arpeggiator
- *  @version    2.30
+ *  @version    2.31
  *  @author     Paolo Estorm
  *  @date       2025/09/16
  *  @license    GPL v3.0 
@@ -25,7 +25,7 @@
 // https://brendanclarke.com/wp/2014/04/23/arduino-based-midi-sequencer/
 
 // system
-const char version[] PROGMEM = "V2.30";
+const char version[] PROGMEM = "V2.31";
 #include "Vocabulary.h"
 #include "Random8.h"
 Random8 Random;
@@ -99,7 +99,7 @@ bool confirmation = false;   // confirmation popup inside file manager
 bool full = false;           // is the selected save slot full?
 int8_t curpos = 0;           // cursor position in songmode, 0-7
 bool StartMenuTimer = true;  // activate the go-to-menu timer
-uint8_t Jittercur = 1;       // cursor position in the jitter submenu
+uint8_t Jittercur = 0;       // cursor position in the jitter submenu
 bool cloneCur = false;       // cursor position in the clone seq submenu
 bool editorPopup = false;    // normal popup or in editor popup?
 uint8_t currentSeqEdit = 0;  // sequence that you are editing in editor
@@ -128,7 +128,7 @@ uint8_t flip = 6;                  // part of the frameperstep's flipflop
 uint8_t flop = 6;                  // part of the frameperstep's flipflop
 bool flipflopEnable;               // switch for the frameperstep's flipflop
 bool swing = false;                // is swing enabled?
-uint8_t snapmode = 0;              // when play/stop the next sequence in live mode. 0=pattern, 1=up-beat, 2=beat
+bool snapmode = 0;                 // when play/stop the next sequence in live mode. 0=pattern, 1=beat
 bool start = false;                // dirty fix for a ableton live 10 bug. becomes true once at sequence start and send a sync command
 uint8_t BPM = 120;                 // beats per minute for internalclock - min 20, max 250 bpm
 const uint8_t iterations = 8;      // how many BPM "samples" to averege out for the tap tempo. more = more accurate
@@ -205,6 +205,27 @@ uint8_t drumKeybMode = 1;         // 0=free, 1=sync, 2=roll, 3=mixer
 uint8_t modeselect = 0;     // 0=arp.mode, 1=rec.mode, 2=song mode, 3=live mode
 uint8_t premodeselect = 0;  // pre-selection of the mode in submenu
 
+void BootAnimation() {  // play the boot animation
+
+  oled.setSize(3);  // set font size to 3x
+
+  // startup animation
+  for (uint8_t i = 0; i <= 22; i++) {  // scroll "arpmini"
+    oled.setCursorXY(2, i);
+    oled.println(F("ARPMINI"));
+    delayMicroseconds(12500);
+  }
+
+  oled.setCursorXY(10, 0);
+  oled.print(F(":STORM"));
+
+  oled.setSize(2);
+  oled.setCursorXY(34, 48);
+  oled.printF(version);
+
+  Bip(2);  // startup Sound
+}
+
 void setup() {  // initialization setup
 
   DDRD &= ~(1 << PD5);  // disable LED_BUILTIN_TX (on-board LED) (set as input)
@@ -277,25 +298,9 @@ void setup() {  // initialization setup
   SynthReset();
   Startposition();
 
-  oled.setSize(3);  // set font size to 3x
+  BootAnimation();  // boot animation
 
-  // startup animation
-  for (uint8_t i = 0; i <= 22; i++) {  // scroll "arpmini"
-    oled.setCursorXY(2, i);
-    oled.println(F("ARPMINI"));
-    delayMicroseconds(12500);
-  }
-
-  oled.setCursorXY(10, 0);
-  oled.print(F(":STORM"));
-
-  oled.setSize(2);
-  oled.setCursorXY(34, 48);
-  oled.printF(version);
-
-  Bip(2);  // startup Sound
   delay(2000);
-
   PrintMainScreen();  // go to main screen
 }
 
@@ -323,8 +328,8 @@ void SetBPM(uint8_t tempo) {  // change Timer1 speed to match BPM (20-250)
 
 void TCTask() {  // time critical task
 
-  MIDI.read();   // read incoming MIDI data, port 1
-  MIDI2.read();  // read incoming MIDI data, port 2
+  MIDI.read();   // read incoming MIDI data from port 1
+  MIDI2.read();  // read incoming MIDI data from port 2
 }
 
 void TCTask2() {  // time critical task 2
@@ -350,8 +355,8 @@ void loop() {  // run repeatedly
   TCTask();   // read incoming MIDI data
   TCTask2();  // check if is time to run the internal clock
 
-  if (Serial.available()) {  // if connected
-    PcSync(Serial.read());   // exchange data with PC (Arpmini Editor)
+  if (Serial.available()) {  // if incoming serial data from USB
+    PcSync(Serial.read());   // read incoming serial data
   }
 
   DebounceButtons();   // debounce buttons
@@ -388,7 +393,7 @@ void ResetEEPROM() {  // initialize the EEPROM with default values
 
 uint16_t eepromaddress(uint16_t address, uint8_t slot) {  // calculate eeprom song addresses
 
-  uint16_t slotsize = (numberSequences * maxSeqLength) + 16 + 16;
+  const uint16_t slotsize = (numberSequences * maxSeqLength) + 16 + 16;
   return (slotsize * slot) + address;
 }
 
@@ -673,15 +678,16 @@ void TapTempo() {  // calculate tempo based on the tapping frequency
 
 void HandleInternalClock() {  // internal clock
 
-  if (internalClock) {                                                                          // normal operation, run clock
-    if ((sendrealtime == 1 && playing) || (sendrealtime == 2)) MIDI.sendRealTime(midi::Clock);  // send midi clock
-    RunClock();                                                                                 // run clock
+  if (internalClock) {                                                                     // normal operation, run clock
+    if ((sendrealtime == 1 && playing) || (sendrealtime == 2)) SendRealtime(midi::Clock);  // send midi clock
+    RunClock();                                                                            // run clock
   }
 
   else {  // if external clock fails, stop the sequencer
     clockTimeout++;
     if (clockTimeout >= 100) {
       clockTimeout = 0;
+      PrintAlertNotifi(10);  // clock lost!
       HandleStop();
     }
   }
@@ -690,9 +696,9 @@ void HandleInternalClock() {  // internal clock
 void HandleExternalClock() {  // external clock
 
   if (!internalClock) {
-    clockTimeout = 0;                                  // reset the clock timeout
-    if (sendrealtime) MIDI.sendRealTime(midi::Clock);  // send midi clock
-    RunClock();                                        // run clock
+    clockTimeout = 0;           // reset the clock timeout
+    SendRealtime(midi::Clock);  // send midi clock
+    RunClock();                 // run clock
   }
 }
 
@@ -738,7 +744,7 @@ void RunClock() {  // main clock
 
       if (modeselect == 3) {  // live mode
 
-        if ((snapmode == 0 && countStep == (seqLength - 1)) || (snapmode == 1 && countBeat == 0) || (snapmode == 2 && countBeat % 2 == 0)) {  // snapmodes timings
+        if ((snapmode == 0 && countStep == (seqLength - 1)) || (snapmode == 1 && countBeat % 2 == 0)) {  // snapmodes timings
 
           if (scheduleSuspend) {
             scheduleSuspend = false;
@@ -780,7 +786,7 @@ void RunClock() {  // main clock
     }
   }
 
-  else if (globalTicks == 2 && playing) {  // turn OFF yellowLED - tempo indicator
+  else if (globalTicks == 2 && playing) {  // turn OFF LEDs every two globalTicks - tempo indicator
 
     if (menunumber >= 4) safedigitalWrite(yellowLED, LOW);  // while popups or inside editor, turn OFF yellowled
     else if (menunumber == 0) {                             // in main screen
@@ -792,7 +798,7 @@ void RunClock() {  // main clock
   if (countTicks == 0) {  // trigger new step
     if (start) {
       start = false;
-      if (sendrealtime) MIDI.sendSongPosition(0);  // make ableton live happy, without would be slightly out of sync
+      HandleSongPosition(0);  // make ableton live happy, without would be slightly out of sync
     }
     if (modeselect == 3 || clockenable) HandleStep();  // trigger new step
   }
@@ -815,11 +821,10 @@ void SetTicksPerStep() {  // set ticksPerStep values
 
   static const uint8_t noSwingValues[] PROGMEM = { 2, 3, 4, 6, 8, 12, 16, 24 };
   static const uint8_t flipSwing[] PROGMEM = { 2, 4, 4, 8, 8, 16, 16, 32 };
-  static const uint8_t flopSwing[] PROGMEM = { 2, 2, 4, 4, 8, 8, 16, 16 };
 
   if (swing) {
     flip = pgm_read_byte(&flipSwing[StepSpeed]);  // read from PROGMEM
-    flop = pgm_read_byte(&flopSwing[StepSpeed]);  // read from PROGMEM
+    flop = (StepSpeed % 2 == 0) ? flip : flip / 2;
   } else {
     flip = pgm_read_byte(&noSwingValues[StepSpeed]);  // read from PROGMEM
     flop = flip;
@@ -848,7 +853,7 @@ uint8_t SetNoteLength() {  // set the note duration
     } else noteLength = pgm_read_byte(&noteLengths[noteLengthSelect - 1]);
   } else return (noteLength);
 
-  if (swing && !(StepSpeed % 2 == 0)) {
+  if (swing && !(StepSpeed % 2 == 0)) {  // adapt note length to swing
     if (flipflopEnable) noteLength = noteLength - 4;
     else noteLength = noteLength + 10;
   }
@@ -958,9 +963,14 @@ void Metronome() {  // manage the metronome
   else Bip(4);
 }
 
+void SendRealtime(midi::MidiType type) {  // send MIDI realtime messages
+
+  if (sendrealtime) MIDI.sendRealTime(type);
+}
+
 void HandleStart() {  // start message - re-start the sequence
 
-  if (sendrealtime) MIDI.sendRealTime(midi::Start);  // pass through start messages
+  SendRealtime(midi::Start);  // pass through start messages
 
   internalClock = false;
   playing = true;
@@ -970,19 +980,18 @@ void HandleStart() {  // start message - re-start the sequence
 
 void HandleContinue() {  // continue message - start the sequence
 
-  if (sendrealtime) MIDI.sendRealTime(midi::Continue);  // pass through continue messages
+  SendRealtime(midi::Continue);  // pass through continue messages
 
   internalClock = false;
   globalTicks = 0;
   countTicks = 0;
   playing = true;
-  //if (recording) Startposition();
   UpdateScreenBPM();
 }
 
 void HandleStop() {  // stop the sequence and switch over to internal clock
 
-  if (sendrealtime) MIDI.sendRealTime(midi::Stop);  // pass through stop messages
+  SendRealtime(midi::Stop);  // pass through stop messages
 
   if (recording) {
     recording = false;
@@ -1004,13 +1013,11 @@ void StartAndStop() {  // manage starts and stops
 
   playing = !playing;
   if (internalClock) {
-    if (playing) Startposition();
-    if (sendrealtime) {
-      if (playing) {
-        MIDI.sendRealTime(midi::Start);
-        start = true;  // to make ableton live 10 happy
-      } else MIDI.sendRealTime(midi::Stop);
-    }
+    if (playing) {
+      Startposition();
+      SendRealtime(midi::Start);
+      start = true;  // to make ableton live 10 happy
+    } else SendRealtime(midi::Stop);
   } else {  // not internal clock
     AllNotesOff();
     if (recording) {
@@ -1050,7 +1057,10 @@ void Startposition() {  // called every time the sequencing starts or stops
 
 void UpdateScreenBPM() {  // refresh BPM indicator
 
-  StartScreenTimer = true;                                                   // turn ON display and restart screen-on timer
+  StartScreenTimer = true;  // turn ON display and restart screen-on timer
+
+  if (alertnotification) return;
+
   if (menunumber == 0) PrintBPMBar();                                        // refresh BPM bar
   else if (menunumber == 2 && menuitem == 4) SubmenuSettings(menuitem, -1);  // refresh submenu page
 }
@@ -1190,7 +1200,7 @@ void HandleNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle 
         if (modeselect == 0) ClearArpBuffer();
         if (trigMode == 2 && !recording) {  // trigmode 2 (retrig) restart the sequencer
           Startposition();
-          if (internalClock && sendrealtime) MIDI.sendSongPosition(0);
+          if (internalClock) HandleSongPosition(0);
         }
       }
 
@@ -1706,6 +1716,13 @@ void PrintAlertNotifi(uint8_t txt) {  // print notifications
         oled.print(transp);
         break;
       }
+
+    case 10:  // clock lost!
+      oled.setCursorX(9);
+      oled.print(F("CLOCK"));
+      oled.shiftX();
+      oled.print(F("LOST"));
+      break;
   }
 
   oled.invertText(false);
@@ -2279,25 +2296,25 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
       if (keyEnable) {
         if (!greenstate) {
           if (!Direction) {
-            if (Jittercur < 3) Jittercur++;
+            if (Jittercur < 2) Jittercur++;
           } else {
-            if (Jittercur > 1) Jittercur--;
+            if (Jittercur > 0) Jittercur--;
           }
         } else {
           if (Direction) {
-            if (Jittercur == 1) {
+            if (Jittercur == 0) {
               if (jitrange < 24) jitrange++;
-            } else if (Jittercur == 2) {
+            } else if (Jittercur == 1) {
               if (jitprob < 10) jitprob++;
-            } else if (Jittercur == 3) {
+            } else {
               if (jitmiss < 9) jitmiss++;
             }
           } else {
-            if (Jittercur == 1) {
+            if (Jittercur == 0) {
               if (jitrange > 0) jitrange--;
-            } else if (Jittercur == 2) {
+            } else if (Jittercur == 1) {
               if (jitprob > 0) jitprob--;
-            } else if (Jittercur == 3) {
+            } else {
               if (jitmiss > 0) jitmiss--;
             }
           }
@@ -2309,16 +2326,23 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
       oled.println(F("  RANDOM  "));
       oled.invertText(false);
 
-      oled.print(F(" RANG "));
-      oled.println(jitrange);
-      oled.print(F(" PROB "));
-      oled.print(jitprob * 10);
-      oled.printlnF(percent);
-      oled.print(F(" MISS "));
-      oled.print(jitmiss * 10);
-      oled.printF(percent);
-      oled.setCursorXY(0, Jittercur * 16);
-      oled.printF(printnext);
+      for (uint8_t i = 0; i < 3; i++) {
+
+        if (i == Jittercur) oled.printF(printnext);
+        else oled.printF(space);
+
+        oled.printF(jitmodes[i]);
+
+        if (i == 0) {
+          oled.println(jitrange);
+        } else if (i == 1) {
+          oled.print(jitprob * 10);
+          oled.printlnF(percent);
+        } else {
+          oled.print(jitmiss * 10);
+          oled.printlnF(percent);
+        }
+      }
       break;
 
     case 8:  // note length
@@ -2408,6 +2432,7 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
 
       //-----SCREEN COMMANDS----//
       oled.printlnF(speed);
+      oled.print(F("1/"));
       oled.printF(speeds[StepSpeed]);
 
       PrintBottomText();
@@ -2457,11 +2482,7 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
 
         //-----BUTTONS COMMANDS----//
         if (keyEnable) {
-          if (Direction) {
-            if (snapmode < 2) snapmode++;
-          } else {
-            if (snapmode > 0) snapmode--;
-          }
+          snapmode = Direction;
         }
 
         //-----SCREEN COMMANDS----//
@@ -3119,7 +3140,7 @@ void ButtonsCommands(bool anypressed) {  // manage buttons's commands
       if (greenispressed) {  // if green is pressed
 
         if (newredstate) {  // rec or song mode, open seq. selection popup
-          if (modeselect > 0) PrintSeqSelectPopup();
+          if (modeselect > 0 && !recording) PrintSeqSelectPopup();
         }
 
         else if (newbluestate) {  // step-recording, go backwards
@@ -3150,12 +3171,10 @@ void ButtonsCommands(bool anypressed) {  // manage buttons's commands
           if (internalClock) {
             if (playing) {
               Startposition();
-              if (sendrealtime) {
-                MIDI.sendRealTime(midi::Start);
-                start = true;
-              }
+              SendRealtime(midi::Start);
+              start = true;
             } else {
-              if (sendrealtime) MIDI.sendRealTime(midi::Continue);
+              SendRealtime(midi::Continue);
               playing = true;
             }
           }
@@ -3639,7 +3658,7 @@ void ButtonsCommands(bool anypressed) {  // manage buttons's commands
       greentristate = 0;
     }
 
-    if (colum && !row) row = 1;  // move to the right to exit sidemenu
+    if (colum && !row) row = 1;  // exit sidemenu
     window = (colum - 1) / 8;    // calculate window number
     frame = (row - 1) / 3;       // calculate frame number
 
