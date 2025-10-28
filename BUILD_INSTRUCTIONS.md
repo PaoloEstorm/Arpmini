@@ -144,12 +144,22 @@ Be careful not to damage the PCB traces; a clean trim helps prevent short circui
 
 ![IMG_7696](https://github.com/user-attachments/assets/a0040c43-1c60-4200-aec9-8397e92503bd)
 
-Flip the board to the button side and trim the excess length of both the 7-pin header on the screen and the two individual support headers.
+Flip the board to the button side and trim the excess length of both the 7-pin header on the screen and the two individual support headers aswell.
 
 ![IMG_7662](https://github.com/user-attachments/assets/11ebb74f-a361-4c4c-b7c9-dba3bba4affc)
+
+Cut off four 4-pin strips from a male header.
+
 ![IMG_7697](https://github.com/user-attachments/assets/b1636fb9-55a8-4845-a2b9-788d60ecc4a7)
 ![IMG_7698](https://github.com/user-attachments/assets/82fc7971-c909-47d8-b5d5-ab604e2658dd)
+
+Flip the main board to the side marked "screen board goes here" and place the four header strips: two on the left and right sides, and two on the bottom side, as shown in the photo above.
+
 ![IMG_7700](https://github.com/user-attachments/assets/11457e76-1589-4172-a346-4efd11edb5bf)
+
+Keeping the main board in the same position (with "screen board goes here" facing up), sandwich the previously assembled screen board on top.
+Double-check that it is correctly positioned.
+
 ![IMG_7703](https://github.com/user-attachments/assets/a4c7b1b7-83b0-44f6-9cce-e949ebf807e1)
 ![IMG_7707](https://github.com/user-attachments/assets/67cfb1eb-e7c9-4bbc-b525-f026e6518491)
 ![IMG_7709](https://github.com/user-attachments/assets/78fed8d8-a853-4484-aadc-e220bd4007d9)
