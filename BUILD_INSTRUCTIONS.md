@@ -144,7 +144,7 @@ Be careful not to damage the PCB traces; a clean trim helps prevent short circui
 
 ![IMG_7696](https://github.com/user-attachments/assets/a0040c43-1c60-4200-aec9-8397e92503bd)
 
-Flip the board to the button side and trim the excess length of both the 7-pin header on the screen and the two individual support headers aswell.
+Flip the board to the button side and trim the excess length of both the 7-pin header on the screen and the two individual support headers as well.
 
 ![IMG_7662](https://github.com/user-attachments/assets/11ebb74f-a361-4c4c-b7c9-dba3bba4affc)
 
@@ -175,8 +175,27 @@ Using the flush side cutter, trim the excess length of the soldered pins as much
 Be careful not to damage the PCB traces; a clean trim ensures the enclosure will close properly.
 
 ![IMG_7714](https://github.com/user-attachments/assets/f4b2e234-0aa0-4ba1-a2ce-66dc0961f0c7)
+
+On the main board, trim the excess length of the Pro Micro’s pin headers as well.
+
+Be careful not to damage the PCB traces or any nearby components; a clean trim ensures the enclosure will close properly.
+
 ![IMG_7712](https://github.com/user-attachments/assets/987b928f-eb54-4839-8028-cfb8a0ad5530)
+
+The internal assembly is complete!
+
 ![IMG_7716](https://github.com/user-attachments/assets/5e13078d-aef8-4063-ae00-ae3587a2fa0b)
+
+After making sure the two boards are properly aligned and parallel to each other, you can proceed to flash the firmware.
+
+Connect Arpmini to your computer using a USB-C cable.
+A red LED between the main board and the Pro Micro should light up, indicating that the bootloader is ready to receive the firmware.
+Download the full [Arpmini](https://github.com/PaoloEstorm/Arpmini) project and open the Arpmini.ino file with the Arduino IDE.
+Make sure Arpmini is selected under Tools → Board → Arpmini Core → Arpmini, then click Upload.
+During the upload, press the yellow and blue buttons on Arpmini simultaneously to start the EEPROM initialization procedure.
+If you miss the timing, you can still initialize the EEPROM by unplugging and reconnecting Arpmini while holding both buttons.
+For this first upload, selecting the serial port is not necessary/possible, but for future uploads you will need to choose Arpmini from the list of available serial ports.
+
 ![IMG_7720](https://github.com/user-attachments/assets/e186841a-647b-47e8-9d4e-999f45c23eb7)
 ![IMG_7727](https://github.com/user-attachments/assets/537b330b-dbcc-40eb-8e08-a704e3a369d0)
 ![IMG_7729](https://github.com/user-attachments/assets/2981ef82-cee0-4627-8057-78668a46a3c2)
