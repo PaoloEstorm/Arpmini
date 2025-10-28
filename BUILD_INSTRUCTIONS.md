@@ -137,7 +137,15 @@ Flip the board and solder all pins, aiming for clean joints without using too mu
 Flip the PCB to the button side and solder the two support pins of the screen.
 
 ![IMG_7693](https://github.com/user-attachments/assets/1c134ed6-c941-4669-bf3f-8a0ff4c79794)
+
+Using the flush side cutter, trim the excess length of the soldered pins as much as possible.
+
+Be careful not to damage the PCB traces; a clean trim helps prevent short circuits in later assembly steps.
+
 ![IMG_7696](https://github.com/user-attachments/assets/a0040c43-1c60-4200-aec9-8397e92503bd)
+
+Flip the board to the button side and trim the excess length of both the 7-pin header on the screen and the two individual support headers.
+
 ![IMG_7662](https://github.com/user-attachments/assets/11ebb74f-a361-4c4c-b7c9-dba3bba4affc)
 ![IMG_7697](https://github.com/user-attachments/assets/b1636fb9-55a8-4845-a2b9-788d60ecc4a7)
 ![IMG_7698](https://github.com/user-attachments/assets/82fc7971-c909-47d8-b5d5-ab604e2658dd)
