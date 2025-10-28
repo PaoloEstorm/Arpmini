@@ -59,6 +59,8 @@ A simulated demo of Arpmini can be explored on Wokwi via the link https://wokwi.
 
 ### Enclosure 3D model [here](https://github.com/PaoloEstorm/Arpmini/blob/main/extras/Arpmini%201.65%20v3.stl)
 
+External labels [here](https://github.com/PaoloEstorm/Arpmini/tree/main/extras)
+
 Sparkfun Pro Micro: https://amzn.eu/d/if0r67j
 
 Oled Display (blue): https://amzn.eu/d/c0RTBxJ or Oled Display (white): https://amzn.eu/d/1IbVAiL
