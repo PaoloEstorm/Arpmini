@@ -79,12 +79,13 @@ Be careful not to damage the PCB traces; a clean trim helps prevent short circui
 ![IMG_7653](https://github.com/user-attachments/assets/c1932155-c225-4ad5-be54-3c565214b885)
 
 ![IMG_7657](https://github.com/user-attachments/assets/28d37a5f-f4c1-4563-8cac-c5f2120b4382)
-![IMG_7659](https://github.com/user-attachments/assets/491b0f57-f502-421b-a288-3957fcad1e3c)
 
 Place the buzzer on the top side of the main PCB, observing the correct polarity.
 The hole marked (+) on the PCB must align with the (+) on the buzzer.
 
 Double-check the placement before soldering.
+
+![IMG_7659](https://github.com/user-attachments/assets/491b0f57-f502-421b-a288-3957fcad1e3c)
 
 ![IMG_7661](https://github.com/user-attachments/assets/b448fbdd-c14b-48a4-877d-a49efdf321dc)
 
@@ -216,7 +217,7 @@ Now proceed with assembling the 3D-printed case using the [model](https://github
 
 ![IMG_7730](https://github.com/user-attachments/assets/dc0bfbf7-5828-45f5-a514-f3a7d7a30472)
 
-rest the brass inserts into the dedicated slots on the inner side of the front panel, without pressing them in yet.
+Rest the brass inserts into the dedicated slots on the inner side of the front panel, without pressing them in yet.
 
 ![IMG_7731](https://github.com/user-attachments/assets/bc4d3b51-80ed-4a1d-9ac3-41e64aefe49b)
 ![IMG_7734](https://github.com/user-attachments/assets/c1323db4-8425-4111-8c77-7adec7176eba)
@@ -262,4 +263,4 @@ In the next steps, stickers can be applied, but this is optional and purely for 
 ![IMG_8026](https://github.com/user-attachments/assets/7ef160eb-d8d6-415f-baaf-70a2b16bb54f)
 ![IMG_8029](https://github.com/user-attachments/assets/f7b39c10-1613-40fc-a026-46b1098142f5)
 
-Paolo Estorm
+by Paolo Estorm <3
