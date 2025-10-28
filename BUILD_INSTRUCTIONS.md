@@ -1,14 +1,60 @@
 ![IMG_7627](https://github.com/user-attachments/assets/04d9ebf9-eb3a-4e3d-8a49-5158be56317a)
+
+All the components required to assemble Arpmini, including the 3D model for the case, are listed in the main repository.
+Some parts will no longer be easily accessible after assembly, so make sure you have everything you need before starting, and follow the steps in the exact order.
+
 ![IMG_7628](https://github.com/user-attachments/assets/3241549b-fc8a-4c3d-aa36-a8da76474b7d)
 ![IMG_7629](https://github.com/user-attachments/assets/0fb7ab1c-b698-49df-aefd-05bed35ea541)
+
+Insert the four 3.5 mm jack sockets into their corresponding holes, making sure to mount them on the correct side of the PCB; the one with the logo and SMD components.
+
 ![IMG_7633](https://github.com/user-attachments/assets/bb319975-ae6e-48fd-a4a5-4f7039b63d90)
+
+While keeping the sockets in place, solder each exposed pin one by one, making sure the connectors stay as straight, flat, and aligned with the PCB as possible.
+You can use a strip of adhesive tape to hold them steady during the process if needed.
+
 ![IMG_7637](https://github.com/user-attachments/assets/538a48ba-2530-491f-b067-3380df87bba6)
+
+Using a flush side cutter, trim the excess length of the soldered pins as much as possible.
+Be careful not to damage the PCB traces; a clean trim helps prevent short circuits in later assembly steps.
+
 ![IMG_7638](https://github.com/user-attachments/assets/12af2fa2-fd75-4b2a-a19a-13f18eb9cc27)
+
+Take the Pro Micro board and make sure you have the male pin headers ready.
+They usually come included with the board. If not, cut two 12-pin strips from a longer header.
+
 ![IMG_7640](https://github.com/user-attachments/assets/e8e18a39-80b8-4099-8b05-c478c2681255)
+
+Most Pro Micro boards include two small pads located next to the TX pin. These pads define the board’s operating voltage:
+if the pads are not bridged, the board runs at 3.3V;
+if they are bridged, the board runs at 5V.
+
 ![IMG_7642](https://github.com/user-attachments/assets/097ac34c-d9d0-411b-8978-b6b37bea6ca3)
+
+Arpmini operates at 5V, so the pads MUST be bridged using a small amount of solder.
+Be careful not to damage nearby components. A fine-tip soldering iron and moderate temperature (around 280°C / 536°F) make the process easier.
+
 ![IMG_7645](https://github.com/user-attachments/assets/f51c828f-c8ba-4166-b091-382ca1d926b8)
+
+Insert the two 12-pin male headers into the holes, making sure to place them on the side of the PCB with the "Pro Micro" label and the microcontroller.
+Flip the board and solder all pins, aiming for clean joints without using too much solder, while keeping the headers pressed firmly against the board.
+Using a breadboard to hold the pins in place during soldering can be very helpful!
+
 ![IMG_7643](https://github.com/user-attachments/assets/be4a3ded-f3c9-4a6e-97d1-8ecebeebbf23)
+
+Once the headers are soldered, proceed to flash the bootloader specifically designed for Arpmini.
+To connect the board to the ISP, it is recommended to use Dupont jumper cables to avoid soldering.
+Alternatively, you can temporarily solder wires on the back side of the board, where the headers were just soldered, while keeping the front headers untouched.
+
 <img width="2264" height="1798" alt="Bootloader_ProMicro_Wiring" src="https://github.com/user-attachments/assets/ba20b7d6-9e37-421d-a5eb-c4a35544c89f" />
+
+Follow the instructions available [here](https://github.com/PaoloEstorm/Arpmini-Core) to install the Arpmini Core in the Arduino IDE.
+Once installed, go to Tools → Board → Arpmini Core → Arpmini.
+Then, in Tools → Programmer, select Arduino as ISP.
+In Tools → Port, select the serial port of your Arduino Uno/Nano/ISP.
+Finally, click Burn Bootloader in the Tools menu.
+If the connections and configuration are correct, the bootloader should be successfully written within a few seconds.
+
 ![IMG_7646](https://github.com/user-attachments/assets/03291826-cb09-4e71-a2a8-52f145933842)
 ![IMG_7647](https://github.com/user-attachments/assets/0e32852d-404c-4311-8915-ffcd07c3279a)
 ![IMG_7650](https://github.com/user-attachments/assets/33e11699-e048-4b26-836c-f3d161d3734d)
