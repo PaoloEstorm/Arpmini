@@ -34,7 +34,7 @@ if they are bridged, the board runs at 5V.
 ![IMG_7642](https://github.com/user-attachments/assets/097ac34c-d9d0-411b-8978-b6b37bea6ca3)
 
 Arpmini operates at 5V, so the pads MUST be bridged using a small amount of solder.
-Be careful not to damage nearby components. A fine-tip soldering iron and moderate temperature (around 280°C / 536°F) make the process easier.
+Be careful not to damage nearby components. A fine-tip soldering iron and moderate temperature (around 280°C / 536°F) make the process easy.
 
 ![IMG_7645](https://github.com/user-attachments/assets/f51c828f-c8ba-4166-b091-382ca1d926b8)
 
