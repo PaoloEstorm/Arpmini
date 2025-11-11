@@ -16,21 +16,15 @@ Four backlit buttons, mappable and controllable via MIDI CC from an external MID
 
 MIDI Tracker and Piano Roll–style sequence editors
 
-# Three MIDI outputs and Three MIDI inputs (2 Standard MIDI, 1 USB MIDI) 
+2 MIDI outputs and 2 MIDI inputs - using the MIDI-TRS standard
+
+Integrated MIDI->USB / USB->MIDI interface, fully compatible with Mac, Windows, Linux, Android and iOS 
 
 32KB of memory to store up to 60 songs and various global settings
 
-# Import/export songs between Arpmini and your computer using [Arpmini Editor](https://github.com/PaoloEstorm/Arpmini-Editor)
+Import/export songs between Arpmini and your computer using [Arpmini Editor](https://github.com/PaoloEstorm/Arpmini-Editor)
 
-Built-in speaker for acoustic feedback and metronome
-
-## Arpeggio Styles
-
-Up, Down, Up-Down, Down-Up, Up+Down, Down+Up, Random
-
-## Selectable Scales
-
-Major pentatonic, Minor pentatonic, Major, Minor, Harmonic Minor, Blues, Locrian, Lydian, Dorian, Phrygian, Inverted, Hexatonic
+Built-in speaker for acoustic feedback and metronome and much much more!
 
 ## Arpmini Modes
 
