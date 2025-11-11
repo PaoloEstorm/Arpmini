@@ -5,8 +5,8 @@ volatile long _number_toggles;
 ISR(TIMER3_COMPA_vect) {
 
   if (_number_toggles) {
-    PORTF ^= (1 << PF4);   // toggle pin 21 (A3) (square wave)
-    _number_toggles--;  // decrease remaining toggles
+    if (_number_toggles % 4 == 0) PORTF ^= (1 << PF4);  // toggle pin 21 every 4th interrupt
+    _number_toggles--;                                  // decrease remaining toggles
   } else {
     bitClear(TIMSK3, OCIE3A);  // disable timer
     PORTF &= ~(1 << PF4);      // set pin 21 (A3) LOW
@@ -18,19 +18,17 @@ public:
 
   void init() {  // speaker initialization
 
-    DDRF |= (1 << PF4);                            // set pin 21 (A3) as output
-    PORTF &= ~(1 << PF4);                          // set pin 21 (A3) LOW
-    TCCR3B = (TCCR3B & 0b11111000) | (1 << CS30);  // prescaler = none
-    TCCR3B |= (1 << WGM32);                        // set CTC mode (WGM32 = 1)
-    TCCR3A = 0;                                    // reset count
+    DDRF |= (1 << PF4);                   // set pin 21 (A3) as output
+    PORTF &= ~(1 << PF4);                 // set pin 21 (A3) LOW
+    TCCR3B = (1 << WGM32) | (1 << CS30);  // CTC mode, prescaler = 1
+    TCCR3A = 0;                           // reset count
   }
 
-  void tone(uint32_t frequency, uint8_t duration) {  // play tune
+  void tone(uint32_t frequency, uint16_t duration) {  // play tune
 
-    long toggle_count = 0;
-    uint16_t ocr = F_CPU / frequency / 2 - 1;
+    long toggle_count = (8 * frequency * duration) / 1000;  // ×4 more interrupts
+    uint16_t ocr = (F_CPU / frequency / 8) - 1;               // ISR rate ×4 slower toggle
 
-    toggle_count = 2 * frequency * (uint32_t)duration / 1000;  // calculate the toggle count
     OCR3A = ocr;
     _number_toggles = toggle_count;
     bitSet(TIMSK3, OCIE3A);  // enable timer
@@ -38,8 +36,7 @@ public:
 
   uint16_t midiToFreq(uint8_t note) {  // convert MIDI note to frequency
 
-    // Base frequencies
-    static const uint16_t freqs[12] PROGMEM = {
+    static const uint16_t freqs[12] PROGMEM = {    // Base frequencies
       261, 277, 293, 311, 329, 349,
       370, 392, 415, 440, 466, 494
     };
