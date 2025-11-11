@@ -1,7 +1,6 @@
 # Arpmini
 
-Arpmini is a miniature MIDI loopstation, offering advanced functionality as an arpeggiator, notes/drum sequencer and recorder, designed to control external MIDI instruments.
-You can connect multiple Arpminis together creating a larger and more complex system for live performance or music production.
+Arpmini is a powerful mini MIDI processor that offers advanced features such as an arpeggiator, note/drum sequencer, and editor. It’s designed to control external MIDI instruments for live performances or music production.
 
 # ARPMINI REQUIRES [Arpmini-Core](https://github.com/PaoloEstorm/Arpmini-Core) TO WORK CORRECTLY!
 
@@ -13,15 +12,11 @@ You can connect multiple Arpminis together creating a larger and more complex sy
 
 Simple and intuitive UI
 
+Four backlit buttons, mappable and controllable via MIDI CC from an external MIDI controller
+
 MIDI Tracker and Piano Roll–style sequence editors
 
-Packed with settings for total customization
-
-Two independent MIDI inputs protected by optocouplers
-
-Two MIDI outputs, which share the same signal to control multiple MIDI devices simultaneously
-
-Four backlit buttons, mappable and controllable via MIDI CC from an external MIDI controller
+# Three MIDI outputs and Three MIDI inputs (2 Standard MIDI, 1 USB MIDI) 
 
 32KB of memory to store up to 60 songs and various global settings
 
@@ -61,7 +56,7 @@ A simulated demo of Arpmini can be explored on Wokwi via the link https://wokwi.
 
 External labels [here](https://github.com/PaoloEstorm/Arpmini/tree/main/extras)
 
-Sparkfun Pro Micro: https://amzn.eu/d/if0r67j
+Pro Micro: https://amzn.eu/d/if0r67j
 
 Oled Display (blue): https://amzn.eu/d/c0RTBxJ or Oled Display (white): https://amzn.eu/d/1IbVAiL
 
