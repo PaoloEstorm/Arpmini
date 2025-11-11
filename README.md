@@ -44,7 +44,7 @@ A simulated demo of Arpmini can be explored on Wokwi via the link https://wokwi.
 
 # Build your own Arpmini by following the [Arpmini Assembly Guide](https://github.com/PaoloEstorm/Arpmini/blob/main/BUILD_INSTRUCTIONS.md)!
 
-## Schematic and PCB design: https://oshwlab.com/estorm/miniseq
+## Schematic and PCB design [here](https://oshwlab.com/estorm/miniseq)
 
 ### Enclosure 3D model [here](https://github.com/PaoloEstorm/Arpmini/blob/main/extras/Arpmini%201.65%20v3.stl)
 
