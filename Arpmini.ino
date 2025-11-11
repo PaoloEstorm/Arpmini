@@ -2,9 +2,9 @@
  *  @file       Arpmini.ino
  *  Project     Estorm - Arpmini
  *  @brief      MIDI Sequencer & Arpeggiator
- *  @version    2.31
+ *  @version    2.32
  *  @author     Paolo Estorm
- *  @date       2025/09/16
+ *  @date       2025/10/26
  *  @license    GPL v3.0 
  *
  *  This program is free software: you can redistribute it and/or modify
@@ -25,7 +25,7 @@
 // https://brendanclarke.com/wp/2014/04/23/arduino-based-midi-sequencer/
 
 // system
-const char version[] PROGMEM = "V2.31";
+const char version[] PROGMEM = "V2.32";
 #include "Vocabulary.h"
 #include "Random8.h"
 Random8 Random;
@@ -62,6 +62,7 @@ bool alertnotification = false;  // keep track of notifications, timeout timer
 I2C_EEPROM EEPROM2;
 
 // midi
+#include "MIDIUSB.h"
 #include <MIDI.h>
 #include "SoftwareSerial_MiniRX.h"
 SoftwareSerial Serial2(10);                            // midi2 pin (input)
@@ -209,7 +210,6 @@ void BootAnimation() {  // play the boot animation
 
   oled.setSize(3);  // set font size to 3x
 
-  // startup animation
   for (uint8_t i = 0; i <= 22; i++) {  // scroll "arpmini"
     oled.setCursorXY(2, i);
     oled.println(F("ARPMINI"));
@@ -326,13 +326,50 @@ void SetBPM(uint8_t tempo) {  // change Timer1 speed to match BPM (20-250)
   OCR1A = ((250000UL * 5) - tempo) / (2 * tempo);
 }
 
-void TCTask() {  // time critical task
+void MIDIUSBRead() {  // parse incoming MIDI data from USB
 
-  MIDI.read();   // read incoming MIDI data from port 1
-  MIDI2.read();  // read incoming MIDI data from port 2
+  if (MidiUSB.RX_available()) {  // if MIDI USB is available
+
+    midiEventPacket_t rx;
+
+    do {
+      rx = MidiUSB.read();
+
+      if (rx.header == 0x3) {  // song position
+        if (rx.byte1 == 0xF2 && syncport == 3) HandleSongPosition((rx.byte3 << 7) | rx.byte2);
+      }
+
+      else if (rx.header == 0x8) HandleNoteOff((rx.byte1 & 0xF) + 1, rx.byte2, rx.byte3);  // note off
+
+      else if (rx.header == 0x9) {  // note on
+
+        if (rx.byte3 > 0) HandleNoteOn((rx.byte1 & 0xF) + 1, rx.byte2, rx.byte3);  // if velocity is more than 0, it's a note on
+        else HandleNoteOff((rx.byte1 & 0xF) + 1, rx.byte2, rx.byte3);              // otherwise it's a note off
+      }
+
+      else if (rx.header == 0xB) HandleCC((rx.byte1 & 0xF) + 1, rx.byte2, rx.byte3);  // midi CC
+
+      else if (rx.header == 0xF) {  // realtime messages
+        if (syncport == 3) {
+          if (rx.byte1 == 0xFA) HandleStart();               // start message
+          else if (rx.byte1 == 0xFB) HandleContinue();       // continue message
+          else if (rx.byte1 == 0xFC) HandleStop();           // stop message
+          else if (rx.byte1 == 0xF8) HandleExternalClock();  // clock tick
+        }
+      }
+
+    } while (rx.header != 0);
+  }
 }
 
-void TCTask2() {  // time critical task 2
+void TCTask() {  // time critical task - MIDI
+
+  MIDI.read();    // read incoming MIDI data from port 1
+  MIDI2.read();   // read incoming MIDI data from port 2
+  MIDIUSBRead();  // read incoming MIDI data from port 3 (USB)
+}
+
+void TCTask2() {  // time critical task 2 - clock
 
   if (stepEnable) {  // check if is time to run the internal clock
     stepEnable = false;
@@ -493,17 +530,17 @@ void GoToMenuTimer() {  // greenbutton longpress, enter the menu
   }
 
   if (MenuTimerState) {
-    if (greentristate == 2) {
-      if (millis() - SampleMenuTime > 1000) {
+    if (greentristate == 2) {                  // if green button is pressed
+      if (millis() - SampleMenuTime > 1000) {  // if 1 second is passed
         MenuTimerState = false;
         greentristate = 1;
-        Bip(2);
-        if (modeselect == 3) menuitem = 2;
-        PrintMenu(menuitem);
-        if (recording) {
+        if (recording) {  // disable recording
           recording = false;
           ManageRecording();
         }
+        if (modeselect == 3) menuitem = 2;
+        PrintMenu(menuitem);  // enter the menu
+        Bip(2);               // confirmation sound
       }
     }
   }
@@ -576,7 +613,7 @@ void ClearArpBuffer() {  // clear arpeggiator buffer
 
 void AllNotesOff() {  // send allnoteoff control change
 
-  MIDI.sendControlChange(123, 0, midiChannel);
+  SendCC(123, 0, midiChannel);
 }
 
 void ConnectPort(uint8_t portselect) {  // connects sync ports
@@ -586,7 +623,7 @@ void ConnectPort(uint8_t portselect) {  // connects sync ports
     MIDI.setHandleStart(HandleStart);
     MIDI.setHandleStop(HandleStop);
     MIDI.setHandleContinue(HandleContinue);
-  } else {
+  } else if (portselect == 2) {
     MIDI2.setHandleClock(HandleExternalClock);
     MIDI2.setHandleStart(HandleStart);
     MIDI2.setHandleStop(HandleStop);
@@ -601,7 +638,7 @@ void DisconnectPort(uint8_t portselect) {  // disconnects sync ports
     MIDI.disconnectCallbackFromType(midi::Start);
     MIDI.disconnectCallbackFromType(midi::Stop);
     MIDI.disconnectCallbackFromType(midi::Continue);
-  } else {
+  } else if (portselect == 2) {
     MIDI2.disconnectCallbackFromType(midi::Clock);
     MIDI2.disconnectCallbackFromType(midi::Start);
     MIDI2.disconnectCallbackFromType(midi::Stop);
@@ -611,7 +648,7 @@ void DisconnectPort(uint8_t portselect) {  // disconnects sync ports
 
 void SetSyncPort(uint8_t port) {  // set port for external sync, 0: no port, 1: port1, 2: port2
 
-  for (uint8_t i = 1; i <= 2; i++) {
+  for (uint8_t i = 1; i <= 3; i++) {
     if (i == port) ConnectPort(i);
     else DisconnectPort(i);
   }
@@ -685,7 +722,7 @@ void HandleInternalClock() {  // internal clock
 
   else {  // if external clock fails, stop the sequencer
     clockTimeout++;
-    if (clockTimeout >= 100) {
+    if (clockTimeout >= 50) {
       clockTimeout = 0;
       PrintAlertNotifi(10);  // clock lost!
       HandleStop();
@@ -810,7 +847,7 @@ void RunClock() {  // main clock
     }
 
     if (cronLength[i] < -1) {  // if no time remaining, remove it
-      MIDI.sendNoteOff(cronNote[i], 0, midiChannel);
+      SendNoteOff(cronNote[i], 0, midiChannel);
       cronLength[i] = -1;
       cronNote[i] = -1;
     }
@@ -965,7 +1002,11 @@ void Metronome() {  // manage the metronome
 
 void SendRealtime(midi::MidiType type) {  // send MIDI realtime messages
 
-  if (sendrealtime) MIDI.sendRealTime(type);
+  if (sendrealtime) {
+    MIDI.sendRealTime(type);
+    midiEventPacket_t data = { 0x0F, type, 0, 0 };
+    MidiUSB.sendMIDI(data);
+  }
 }
 
 void HandleStart() {  // start message - re-start the sequence
@@ -1029,7 +1070,13 @@ void StartAndStop() {  // manage starts and stops
 
 void HandleSongPosition(uint16_t position) {  // handle song position messages
 
-  if (sendrealtime) MIDI.sendSongPosition(position);  // pass through song position messages
+  if (sendrealtime) {
+    MIDI.sendSongPosition(position);  // pass through song position messages
+    uint8_t low = position & 0x7F;
+    uint8_t high = (position >> 7) & 0x7F;
+    midiEventPacket_t SPosition = { 0x03, 0xF2, low, high };
+    MidiUSB.sendMIDI(SPosition);
+  }
 }
 
 void Startposition() {  // called every time the sequencing starts or stops
@@ -1063,6 +1110,31 @@ void UpdateScreenBPM() {  // refresh BPM indicator
 
   if (menunumber == 0) PrintBPMBar();                                        // refresh BPM bar
   else if (menunumber == 2 && menuitem == 4) SubmenuSettings(menuitem, -1);  // refresh submenu page
+}
+
+void SendCC(uint8_t cc, uint8_t value, uint8_t channel) {
+
+  MIDI.sendControlChange(cc, value, channel);
+  uint8_t status = 0xB0 | (channel - 1);
+  midiEventPacket_t CCevent = { 0x0B, status, cc, value };
+  MidiUSB.sendMIDI(CCevent);
+}
+
+void SendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) {
+
+  MIDI.sendNoteOn(note, velocity, channel);
+  uint8_t status = 0x90 | (channel - 1);
+  midiEventPacket_t noteOn = { 0x09, status, note, velocity };
+  MidiUSB.sendMIDI(noteOn);
+  //tone8.tone(tone8.midiToFreq(note), 50);  // only for testing
+}
+
+void SendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel) {
+
+  MIDI.sendNoteOff(note, velocity, channel);
+  uint8_t status = 0x80 | (channel - 1);
+  midiEventPacket_t noteOff = { 0x08, status, note, velocity };
+  MidiUSB.sendMIDI(noteOff);
 }
 
 void HandleCC(uint8_t channel, uint8_t cc, uint8_t value) {  // handle CC messages
@@ -1107,12 +1179,12 @@ void HandleCC(uint8_t channel, uint8_t cc, uint8_t value) {  // handle CC messag
     else if (cc == 64) {  // if sustain pedal cc
 
       if (modeselect < 2 && enableSustain && trigMode > 0) {
-        sustain = value;                                  // update sustain state
-        PrintAlertNotifi(8);                              // print sustain state notification
-      } else MIDI.sendControlChange(cc, value, channel);  // pass trough if sustain disabled
+        sustain = value;                  // update sustain state
+        PrintAlertNotifi(8);              // print sustain state notification
+      } else SendCC(cc, value, channel);  // pass trough if sustain disabled
     }
 
-  } else MIDI.sendControlChange(cc, value, channel);  // pass trough if different channel
+  } else SendCC(cc, value, channel);  // pass trough if different channel
 }
 
 void HandleNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle a note-on events
@@ -1141,7 +1213,6 @@ void HandleNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle 
           }
 
           else {                                     // if in mixer mode
-                                                     // else if (!recording /* && playing */) {  // if in mixer mode ??
             DrumNotesMixer[i] = !DrumNotesMixer[i];  // toggle mixer slot
             if (menunumber == 5) PrintEditor();      // if in beat editor, update screen
             else PrintAlertNotifi(0);                // print mixer state notification
@@ -1166,7 +1237,7 @@ void HandleNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle 
         }
       }
 
-      if (!recording) MIDI.sendNoteOn(TransposeAndScale(note), velocity, channel);  // bypass notes
+      if (!recording) SendNoteOn(TransposeAndScale(note), velocity, channel);  // bypass notes
 
       else if (modeselect != 0) {  // recording & !playing & not arp mode
 
@@ -1258,7 +1329,7 @@ void HandleNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle 
       }
     }
 
-  } else MIDI.sendNoteOn(note, velocity, channel);  // bypass if different channel
+  } else SendNoteOn(note, velocity, channel);  // bypass if different channel
 }
 
 void HandleNoteOff(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle a note-off events
@@ -1276,7 +1347,7 @@ void HandleNoteOff(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle
     }
 
     if (!playing) {
-      if (!recording) MIDI.sendNoteOff(TransposeAndScale(note), velocity, channel);  // pass trough note off messages
+      if (!recording) SendNoteOff(TransposeAndScale(note), velocity, channel);  // pass trough note off messages
     }
 
     else {  // else if playing
@@ -1293,7 +1364,7 @@ void HandleNoteOff(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle
       }
     }
 
-  } else MIDI.sendNoteOff(note, velocity, channel);  // bypass if different channel
+  } else SendNoteOff(note, velocity, channel);  // bypass if different channel
 }
 
 void SortArray() {  // sort activeNotes[]
@@ -1310,17 +1381,17 @@ void SortArray() {  // sort activeNotes[]
     }
   }
 
-  for (uint8_t i = 0; i < holdNotes - 1; i++) {  // remove duplicates
+  for (uint8_t i = 0; i < holdNotes - 1; i++) {  // remove any duplicates
     if ((activeNotes[i] > 0) && (activeNotes[i] == activeNotes[i + 1])) {
       activeNotes[i + 1] = 0;
       numActiveNotes--;
     }
   }
 
-  ShiftZeros();
+  ShiftZeros();  // push all zeros to the end of activeNotes[]
 }
 
-void ShiftZeros() {  // push zeros to the end of activeNotes[]
+void ShiftZeros() {  // push all zeros to the end of activeNotes[]
 
   for (uint8_t i = 0; i < holdNotes - 1; i++) {
     if (activeNotes[i] == 0) {
@@ -1412,7 +1483,7 @@ void QueueNote(int8_t note) {  // play notes
 
   for (uint8_t i = 0; i < queueLength; i++) {  // if note is already stored in the queue, remove it
     if (cronNote[i] == note && cronNote[i] >= 0) {
-      MIDI.sendNoteOff(cronNote[i], 0, midiChannel);
+      SendNoteOff(cronNote[i], 0, midiChannel);
       cronNote[i] = -1;
       cronLength[i] = -1;
       break;
@@ -1421,8 +1492,7 @@ void QueueNote(int8_t note) {  // play notes
 
   for (uint8_t i = 0; i < queueLength; i++) {  // place note in a free slot and play it
     if (cronLength[i] < 0) {
-      MIDI.sendNoteOn(note, defaultVelocity, midiChannel);
-      //tone8.tone(tone8.midiToFreq(note), 50);  // only for testing
+      SendNoteOn(note, defaultVelocity, midiChannel);
       cronNote[i] = note;
       cronLength[i] = 100;
       break;
@@ -1803,9 +1873,9 @@ void PrintMainScreen() {  // print main screen - menu 0
   menunumber = 0;
 
   oled.clear();
-  oled.drawRect(0, 0, 127, 8);
 
   // print titles
+  oled.drawRect(0, 0, 127, 8);
   PrintTitle();
   if (modeselect < 2) oled.shiftX();
   oled.shiftX();
@@ -2481,9 +2551,7 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
       else {  // live mode
 
         //-----BUTTONS COMMANDS----//
-        if (keyEnable) {
-          snapmode = Direction;
-        }
+        if (keyEnable) snapmode = Direction;
 
         //-----SCREEN COMMANDS----//
         oled.printlnF(printsnap);
@@ -2605,7 +2673,7 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
         if (internalClock) {
           if (!greenstate) {
             if (Direction) {
-              if (syncport < 2) syncport++;
+              if (syncport < 3) syncport++;
             } else {
               if (syncport > 0) syncport--;
             }
@@ -2619,8 +2687,7 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
 
       //-----SCREEN COMMANDS----//
       oled.println(F("PORT"));
-      if (syncport == 0) oled.printF(off);
-      else oled.print(syncport);
+      oled.printF(inports[syncport]);
       if (EEPROM2.read(3) == syncport) oled.printF(printcircle);
       break;
 
@@ -2773,7 +2840,7 @@ void PrintEditor() {  // print note/beat editor - menu 5
 
         uint8_t currentnote = noteSeq[currentSeqEdit][j];
         uint8_t normalizedTranspose = ((currentnote) % 12 + 12) % 12;  // normalize the transpose value
-        bool pos = currentnote && currentnote <= 127;
+        bool pos = currentnote > 0 && currentnote <= 127;
 
         if (colum == (j + 1)) oled.invertText(true);  // if current note
 
@@ -3034,8 +3101,9 @@ void DebounceButtons() {  // debounce buttons
   static uint8_t lastReading = 0;
   static unsigned long lastDebounceTime = 0;
 
-  uint8_t reading = 0;
+  uint8_t reading = 0;  // reset buttons' readings
 
+  // store all four readings in one byte (uint8_t reading)
   if (!(PINB & (1 << PB4))) reading |= 0x01;  // greenbutton
   if (!(PIND & (1 << PD7))) reading |= 0x02;  // yellowbutton
   if (!(PINE & (1 << PE6))) reading |= 0x04;  // redbutton
@@ -3043,34 +3111,34 @@ void DebounceButtons() {  // debounce buttons
 
   unsigned long now = millis();
 
-  if (reading != lastReading) {
-    lastDebounceTime = now;
-    if (!EnableButtons) {
-      EnableButtons = true;
-      numbuttonspressedCC = 0;
+  if (reading != lastReading) {  // if current reading is not the same as the last reading (a button has been pressed or released)
+    lastDebounceTime = now;      // store current time
+    if (!EnableButtons) {        // if buttons are disabled because currently externally controlled by MIDI CC
+      EnableButtons = true;      // temporarely disable external control
+      numbuttonspressedCC = 0;   // reset active buttons controlled by CC count
     }
   }
 
-  if ((now - lastDebounceTime) > DEBOUNCEDELAY && EnableButtons) {
-    if ((reading & 0x01) != greenstate) {
-      greenstate = (reading & 0x01);
-      ButtonsCommands(greenstate);
-    } else if (((reading >> 1) & 0x01) != yellowstate) {
-      yellowstate = (reading >> 1) & 0x01;
-      ButtonsCommands(yellowstate);
-    } else if (((reading >> 2) & 0x01) != redstate) {
-      redstate = (reading >> 2) & 0x01;
-      ButtonsCommands(redstate);
-    } else if (((reading >> 3) & 0x01) != bluestate) {
-      bluestate = (reading >> 3) & 0x01;
-      ButtonsCommands(bluestate);
+  if ((now - lastDebounceTime) > DEBOUNCEDELAY && EnableButtons) {  // if at least 10 ms has passed
+    if ((reading & 0x01) != greenstate) {                           // if button's state is changed
+      greenstate = (reading & 0x01);                                // update green button flag
+      ButtonsCommands(greenstate);                                  // trigger button's commands
+    } else if (((reading >> 1) & 0x01) != yellowstate) {            // if button's state is changed
+      yellowstate = (reading >> 1) & 0x01;                          // update yellow button flag
+      ButtonsCommands(yellowstate);                                 // trigger button's commands
+    } else if (((reading >> 2) & 0x01) != redstate) {               // if button's state is changed
+      redstate = (reading >> 2) & 0x01;                             // update red button flag
+      ButtonsCommands(redstate);                                    // trigger button's commands
+    } else if (((reading >> 3) & 0x01) != bluestate) {              // if button's state is changed
+      bluestate = (reading >> 3) & 0x01;                            // update blue button flag
+      ButtonsCommands(bluestate);                                   // trigger button's commands
     }
   }
 
-  lastReading = reading;
+  lastReading = reading;  // store current buttons' readings
 }
 
-void ButtonsCommands(bool anypressed) {  // manage buttons's commands
+void ButtonsCommands(bool anypressed) {  // manage buttons' commands
 
   static bool redispressed = false;     // is redbutton still pressed?
   static bool yellowispressed = false;  // is yellowbutton still pressed?
