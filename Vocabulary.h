@@ -127,6 +127,10 @@ const char pitchmodes[][6] PROGMEM = {
   "PRE-", "ROOT-"
 };
 
+const char inports[][4] PROGMEM = {
+  "OFF", "1", "2", "USB"
+};
+
 const char jitmodes[][6] PROGMEM = {
   "RANG ", "PROB ", "MISS "
 };
