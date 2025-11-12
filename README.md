@@ -42,7 +42,7 @@ Live Mode: Allows the playback of one of the 8 different patterns, each assigned
 
 A simulated demo of Arpmini can be explored on Wokwi via the link https://wokwi.com/projects/430279970010982401
 
-# Build your own Arpmini by following the [Arpmini Assembly Guide](https://github.com/PaoloEstorm/Arpmini/blob/main/BUILD_INSTRUCTIONS.md)!
+# Build your own Arpmini by following the [Assembly Guide](https://github.com/PaoloEstorm/Arpmini/blob/main/BUILD_INSTRUCTIONS.md)!
 
 ## Schematic and PCB design [here](https://oshwlab.com/estorm/miniseq)
 
