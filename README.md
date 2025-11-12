@@ -1,4 +1,4 @@
-# Arpmini
+# ARPMINI
 
 Arpmini is a powerful mini MIDI processor that offers advanced features such as an arpeggiator, note/drum sequencer, and editor. It’s designed to control external MIDI instruments for live performances or music production.
 
