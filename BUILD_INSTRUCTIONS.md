@@ -2,7 +2,19 @@
 
 ![IMG_7627](https://github.com/user-attachments/assets/04d9ebf9-eb3a-4e3d-8a49-5158be56317a)
 
-All the components required to assemble Arpmini, including the 3D model for the case, are listed in the main repository.
+Required components: 
+- 1x Pro Micro: https://amzn.eu/d/if0r67j
+- 1x Arpmini PCBs: https://oshwlab.com/estorm/miniseq
+- 1x Oled Display (blue): https://amzn.eu/d/c0RTBxJ or (white): https://amzn.eu/d/1IbVAiL
+- 4x Button+LED, (1x red, 1x yellow, 1x green, 1x blue): https://amzn.eu/d/7UyjFKx
+- 1x 9x5.5mm Buzzer: https://amzn.eu/d/fEAc4UO
+- 2x M3-14mm Screws: https://amzn.eu/d/e37jcLp
+- 2x Brass inserts: https://amzn.eu/d/hlBMRaH
+- 4x 3.5mm Stereo jacks: https://amzn.eu/d/9LeCoT1
+- Pin Headers: https://amzn.eu/d/9up7Byu
+- 1x 3D printed enclosure https://github.com/PaoloEstorm/Arpmini/blob/main/extras/Arpmini%201.65%20v3.stl
+- Optional: External labels https://github.com/PaoloEstorm/Arpmini/tree/main/extras
+
 Some parts will no longer be easily accessible after assembly, so make sure you have everything you need before starting, and follow the steps in the exact order.
 
 ![IMG_7628](https://github.com/user-attachments/assets/3241549b-fc8a-4c3d-aa36-a8da76474b7d)
