@@ -3,7 +3,6 @@
 ![IMG_7627](https://github.com/user-attachments/assets/04d9ebf9-eb3a-4e3d-8a49-5158be56317a)
 
 Required components: 
-- Soldering iron + Soldering Wire
 - 1x Pro Micro: https://amzn.eu/d/if0r67j
 - 1x Arpmini PCBs: https://oshwlab.com/estorm/miniseq
 - 1x 0,96" SPI Oled Display (Blue): https://amzn.eu/d/c0RTBxJ or (White): https://amzn.eu/d/1IbVAiL
