@@ -12,9 +12,9 @@ Arpmini is a powerful mini MIDI processor that offers advanced features such as 
 
 Simple and intuitive UI
 
-Four backlit buttons, mappable and controllable via MIDI CC from an external MIDI controller
-
 MIDI Tracker and Piano Roll–style sequence editors
+
+Four backlit buttons, mappable and controllable via MIDI CC
 
 2 MIDI outputs and 2 MIDI inputs - using the MIDI-TRS standard
 
