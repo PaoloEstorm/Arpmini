@@ -15,7 +15,7 @@ Required components:
 - 1x 3D printed enclosure https://github.com/PaoloEstorm/Arpmini/blob/main/extras/Arpmini%201.65%20v3.stl
 - Optional: External labels https://github.com/PaoloEstorm/Arpmini/tree/main/extras
 
-Some parts will no longer be easily accessible after assembly, so make sure you have everything you need before starting, and follow the steps in the exact order.
+## Some parts will no longer be easily accessible after assembly, so make sure you have everything you need before starting, and follow the steps in the exact order.
 
 ![IMG_7628](https://github.com/user-attachments/assets/3241549b-fc8a-4c3d-aa36-a8da76474b7d)
 ![IMG_7629](https://github.com/user-attachments/assets/0fb7ab1c-b698-49df-aefd-05bed35ea541)
