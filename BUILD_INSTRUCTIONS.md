@@ -6,7 +6,7 @@ Required components:
 - Soldering iron + Soldering Wire
 - 1x Pro Micro: https://amzn.eu/d/if0r67j
 - 1x Arpmini PCBs: https://oshwlab.com/estorm/miniseq
-- 1x Oled Display (Blue): https://amzn.eu/d/c0RTBxJ or (White): https://amzn.eu/d/1IbVAiL
+- 1x 0,96" SPI Oled Display (Blue): https://amzn.eu/d/c0RTBxJ or (White): https://amzn.eu/d/1IbVAiL
 - 4x Button+LED, (1x Red, 1x Yellow, 1x Green, 1x Blue): https://amzn.eu/d/7UyjFKx
 - 1x 9x5.5mm Buzzer: https://amzn.eu/d/fEAc4UO
 - 2x M3-14mm Screws: https://amzn.eu/d/e37jcLp
