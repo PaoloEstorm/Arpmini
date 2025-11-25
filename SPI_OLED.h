@@ -5,8 +5,6 @@
 #pragma GCC optimize("-Os")
 
 #include <Arduino.h>
-#include <Print.h>
-
 #include "Arpmini_Font.h"
 
 #define OLED_WIDTH 128
@@ -41,7 +39,7 @@ const uint8_t _oled_init[] PROGMEM = {
   OLED_DISPLAY_ON,
 };
 
-class SPI_OLED : public Print {
+class SPI_OLED {
 public:
 
   void init() {
@@ -62,6 +60,86 @@ public:
     PORTF &= ~(1 << PF5);  // pin 20 LOW (DC)
 
     for (uint8_t i = 0; i < 19; i++) SPI_write(pgm_read_byte(&_oled_init[i]));  // send initialization sequence
+  }
+
+  void print(signed int num) { // print signed 8-bit number
+
+    if (num < 0) {
+      write('-');
+      num = -num;
+    }
+
+    print((uint8_t)num);
+  }
+
+  void println(signed int num) { // print signed 8-bit number, in new line
+
+    print((signed int)num);
+    write('\n');
+  }
+
+  void print(uint8_t num) { // print unsigned 8-bit number
+
+    if (num == 0) {
+      write('0');
+      return;
+    }
+
+    char buf[3];  // max 3 cifre per uint8_t (0-255)
+    uint8_t i = 0;
+
+    while (num) {
+      buf[i++] = (num % 10) + '0';
+      num /= 10;
+    }
+
+    while (i--) write(buf[i]);
+  }
+
+  void println(uint8_t num) { // print unsigned 8-bit number, in new line 
+
+    print(num);
+    write('\n');
+  }
+
+  void println() { // only new line
+
+    write('\n');
+  }
+
+  void print(const __FlashStringHelper* str) { // print string in PROGMEM
+
+    PGM_P ptr = reinterpret_cast<PGM_P>(str);
+    char c;
+    while ((c = pgm_read_byte(ptr++))) {
+      write(c);
+    }
+  }
+
+  void println(const __FlashStringHelper* str) { // print string in PROGMEM, in new line
+
+    print(str);
+    write('\n');
+  }
+
+  void printPtr(const char* const* table, uint8_t index) {  // print from pointer in PROGMEM
+
+    const char* ptr = (const char*)pgm_read_ptr(&table[index]);
+    printF(ptr);
+  }
+
+  void printF(const char* ptr) {  // print from PROGMEM
+
+    char text;
+    while ((text = pgm_read_byte(ptr++))) {
+      write(text);
+    }
+  }
+
+  void printlnF(const char* ptr) {  // println from PROGMEM, in new line
+
+    printF(ptr);
+    write('\n');
   }
 
   void clear() {
@@ -85,26 +163,6 @@ public:
   void setContrast(uint8_t value) {
 
     sendCommand(OLED_CONTRAST, value);
-  }
-
-  void printPtr(const char* const* table, uint8_t index) {  // print from pointer in PROGMEM
-
-    const char* ptr = (const char*)pgm_read_ptr(&table[index]);
-    printF(ptr);
-  }
-
-  void printF(const char* ptr) {  // print from PROGMEM
-
-    char text;
-    while ((text = pgm_read_byte(ptr++))) {
-      write(text);
-    }
-  }
-
-  void printlnF(const char* ptr) {  // println from PROGMEM
-
-    printF(ptr);
-    write('\n');
   }
 
   void setCursorXY(uint8_t x, uint8_t y) {
@@ -161,14 +219,14 @@ private:
   uint8_t _y = 0;
   uint8_t _shift = 0;
 
-  virtual size_t write(uint8_t data) {
+  void write(uint8_t data) {
 
     if (data == '\n') {
       _x = 0;
       _y += _scaleY;
       setCursorXY(_x, _y);
-      return 1;
-    } else if (data == '\r') return 1;
+      return;
+    }
 
     PORTF |= (1 << PF5);  // pin 20 HIGH (DC)
 
@@ -201,8 +259,6 @@ private:
       }
       _x += _scaleX;
     }
-
-    return 1;
   }
 
   void setWindowShift(uint8_t x0, uint8_t y0) {
