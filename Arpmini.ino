@@ -2,7 +2,7 @@
  *  @file       Arpmini.ino
  *  Project     Estorm - Arpmini
  *  @brief      MIDI Sequencer & Arpeggiator
- *  @version    2.32
+ *  @version    2.33
  *  @author     Paolo Estorm
  *  @date       2025/10/26
  *  @license    GPL v3.0 
@@ -25,7 +25,7 @@
 // https://brendanclarke.com/wp/2014/04/23/arduino-based-midi-sequencer/
 
 // system
-const char version[] PROGMEM = "V2.32";
+const char version[] PROGMEM = "V2.33";
 #include "Vocabulary.h"
 #include "Random8.h"
 Random8 Random;
@@ -1171,7 +1171,7 @@ void HandleCC(uint8_t channel, uint8_t cc, uint8_t value) {  // handle CC messag
               ButtonsCommands(*state);                   // trigger button action
             }
             break;
-          }
+          } else SendCC(cc, value, channel);  // pass trough if CC not mapped
         }
       }
     }
