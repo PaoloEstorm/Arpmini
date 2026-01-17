@@ -62,6 +62,11 @@ public:
     for (uint8_t i = 0; i < 19; i++) SPI_write(pgm_read_byte(&_oled_init[i]));  // send initialization sequence
   }
 
+  void print(char c) { // print letter
+
+    write(c);
+  }
+
   void print(signed int num) { // print signed 8-bit number
 
     if (num < 0) {
