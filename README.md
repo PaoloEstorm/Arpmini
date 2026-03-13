@@ -42,13 +42,15 @@ Live Mode: Allows the playback of one of the 8 different patterns, each assigned
 
 A simulated demo of Arpmini can be explored on Wokwi via the link https://wokwi.com/projects/430279970010982401
 
+Simplified Schematic:
+
+<img width="2620" height="1730" alt="Schematic_DIY" src="https://github.com/user-attachments/assets/d7a3573f-4e8d-4963-ae07-fda174087370" />
+
 # Build your own Arpmini by following the [Assembly Guide](https://github.com/PaoloEstorm/Arpmini/blob/main/BUILD_INSTRUCTIONS.md)!
 
 ## Schematic and PCB design [here](https://oshwlab.com/estorm/miniseq)
 
-### Enclosure 3D model [here](https://github.com/PaoloEstorm/Arpmini/blob/main/extras/Arpmini%201.65%20v3.stl)
-
-External labels [here](https://github.com/PaoloEstorm/Arpmini/tree/main/extras)
+Enclosure 3D model [here](https://github.com/PaoloEstorm/Arpmini/blob/main/extras/Arpmini%201.65%20v3.stl)
 
 Pro Micro: https://amzn.eu/d/if0r67j
 
@@ -66,3 +68,4 @@ Pin Headers: https://amzn.eu/d/9up7Byu
 
 3.5mm Stereo jacks: https://amzn.eu/d/9LeCoT1
 
+External labels [here](https://github.com/PaoloEstorm/Arpmini/tree/main/extras)
