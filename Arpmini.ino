@@ -2,7 +2,7 @@
  *  @file       Arpmini.ino
  *  Project     Estorm - Arpmini
  *  @brief      MIDI Sequencer & Arpeggiator
- *  @version    2.33
+ *  @version    2.34
  *  @author     Paolo Estorm
  *  @date       2025/10/26
  *  @license    GPL v3.0 
@@ -25,7 +25,7 @@
 // https://brendanclarke.com/wp/2014/04/23/arduino-based-midi-sequencer/
 
 // system
-const char version[] PROGMEM = "V2.33";
+const char version[] PROGMEM = "V2.34";
 #include "Vocabulary.h"
 #include "Random8.h"
 Random8 Random;
@@ -69,7 +69,7 @@ SoftwareSerial Serial2(10);                            // midi2 pin (input)
 MIDI_CREATE_INSTANCE(HardwareSerial, Serial1, MIDI);   // initialize midi1
 MIDI_CREATE_INSTANCE(SoftwareSerial, Serial2, MIDI2);  // initialize midi2
 uint8_t midiChannel = 1;                               // MIDI channel to use for sequencer 1 to 16
-int8_t syncport = 1;                                   // activate midi-in sync 0=none, 1=port1, 2=port2
+int8_t syncport = 1;                                   // activate midi-in sync 0=off, 1=port1, 2=port2, 3=usb
 
 // buttons
 #define yellowbutton 6  // yellow button pin
@@ -661,7 +661,7 @@ void ScreenBlink() {  // blinks screen
   confirmsound = true;
 }
 
-void PrintTitle() {  // title's printing setup
+void PrintTitle() {  // title printing setup
 
   oled.setSize(2);
   oled.invertText(true);
@@ -724,7 +724,7 @@ void HandleInternalClock() {  // internal clock
     clockTimeout++;
     if (clockTimeout >= 50) {
       clockTimeout = 0;
-      PrintAlertNotifi(10);  // clock lost!
+      PrintAlertNotifi(11);  // clock lost!
       HandleStop();
     }
   }
@@ -938,9 +938,12 @@ void HandleStep() {  // step sequencer
     if (modeselect < 3) {  // rec & song mode
       if (recording) {
         if (playing) {
-          if (bluestate) {
-            noteSeq[currentSeq][countStep] = 0;  // if recording, bluebutton put a rest/clear step
-            PrintAlertNotifi(7);                 // print clear step notification // could cause screen glitch...
+          if (bluestate) {                                    // if recording, bluebutton put a rest/clear step
+            uint8_t* note = &noteSeq[currentSeq][countStep];  // pointer to current note
+            if (!drumMode) {
+              if (*note > 0 && *note <= 127) *note += 127;  // if note is active, disable note
+            } else *note = 0;                               // drum mode -> clear
+            PrintAlertNotifi(7);                            // print clear step notification // could cause screen glitch...
           }
         }
 
@@ -1180,7 +1183,7 @@ void HandleCC(uint8_t channel, uint8_t cc, uint8_t value) {  // handle CC messag
 
       if (modeselect < 2 && enableSustain && trigMode > 0) {
         sustain = value;                  // update sustain state
-        PrintAlertNotifi(8);              // print sustain state notification
+        PrintAlertNotifi(9);              // print sustain state notification
       } else SendCC(cc, value, channel);  // pass trough if sustain disabled
     }
 
@@ -1312,7 +1315,7 @@ void HandleNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle 
           if (!drumMode) {
             if (keybTransp) {
               keybTransposeNote = note;  // set by-keyboard-transpose
-              PrintAlertNotifi(9);       // print keyboard transposition state
+              PrintAlertNotifi(10);      // print keyboard transposition state
             } else PrintAlertNotifi(4);  // print "keyboard disabled" notification
           }
 
@@ -1747,11 +1750,12 @@ void PrintAlertNotifi(uint8_t txt) {  // print notifications
     case 5:  // step forward
     case 6:  // step backward
     case 7:  // step cleared
+    case 8:  // show only step
       if (seqLength < 9) oled.setCursorX(17);
       else if (countStep < 9) oled.setCursorX(11);
       else oled.setCursorX(5);
 
-      if (txt != 7) {
+      if (txt < 7) {
         oled.printF(printstep);
         if (txt == 5) oled.printF(printnext);  // step forward
         else oled.printF(printback);           // step backward
@@ -1761,17 +1765,22 @@ void PrintAlertNotifi(uint8_t txt) {  // print notifications
       oled.print(F("/"));
       oled.print(seqLength);
 
-      if (txt == 7) oled.print(F(" REST"));  // step cleared
+      if (txt > 6) {
+        oled.printF(space);
+        if (txt == 7) oled.print(F("REST"));  // step cleared
+        else oled.printF(printstep);          // show step
+      }
+
       break;
 
-    case 8:  // sustain state
+    case 9:  // sustain state
       oled.setCursorX(sustain ? 20 : 14);
       oled.printF(printpedal);
       oled.shiftX();
       oled.printPtr(offonalways, sustain);
       break;
 
-    case 9:
+    case 10:
       {  // keyboard transpose state
         int8_t transp = keybTransposeNote - keybBaseNote;
         int8_t abstransp = transp;
@@ -1787,7 +1796,7 @@ void PrintAlertNotifi(uint8_t txt) {  // print notifications
         break;
       }
 
-    case 10:  // clock lost!
+    case 11:  // clock lost!
       oled.setCursorX(9);
       oled.print(F("CLOCK"));
       oled.shiftX();
@@ -2226,6 +2235,10 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
       oled.printlnF(printbpm);
       oled.print(BPM);
       if (!internalClock) oled.printF(printcircle);  // BPM value is referred to the internal clock!
+      PrintBottomText();
+      oled.print(F("TAP"));
+      oled.shiftX();
+      oled.print(F("GREEN"));
       break;
 
     case 5:  // pitch / mixer
@@ -2234,13 +2247,11 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
 
         //-----BUTTONS COMMANDS----//
         if (keyEnable) {
-          if (!greenstate) {
-            if (Direction) {
-              if (curpos < 7) curpos++;
-            } else {
-              if (curpos > 0) curpos--;
-            }
-          } else DrumNotesMixer[curpos] = Direction;
+          if (Direction) {
+            if (curpos < 7) curpos++;
+          } else {
+            if (curpos > 0) curpos--;
+          }
         }
 
         //-----SCREEN COMMANDS----//
@@ -3199,8 +3210,24 @@ void ButtonsCommands(bool anypressed) {  // manage buttons' commands
 
       if (blueispressed) {  // lock mute / midi panic
 
-        if (newgreenstate) SynthReset();  // reset synth
-        else if (newredstate) {           // lock mute
+        if (newgreenstate) {
+          if (!playing && internalClock && recording && modeselect > 0) {  // re-enable note
+
+            if (countStep > -1) {  // don't re-enable start position step
+              if (!drumMode) {
+                uint8_t* note = &noteSeq[currentSeq][countStep];  // pointer to current step
+                if (*note > 127) {                                // if note is disabled
+                  *note -= 127;                                   // enable note
+                  QueueNoteEditor(*note);                         // play note
+                }
+              }
+              PrintAlertNotifi(8);  // show step
+            }
+
+          } else SynthReset();  // reset synth
+          greentristate = 0;
+          newgreenstate = false;
+        } else if (newredstate) {  // lock mute
           if (!recording) lockmute = !lockmute;
         }
       }
@@ -3259,10 +3286,13 @@ void ButtonsCommands(bool anypressed) {  // manage buttons' commands
             PrintAlertNotifi(5);  // print going forwards notification
           }
 
-          else if (newbluestate) {  // step-recording, clear step
-            if (countStep > -1) {   // don't clear start position step
-              noteSeq[currentSeq][countStep] = 0;
-              PrintAlertNotifi(7);  // print clear step notification
+          else if (newbluestate) {                              // step-recording, clear step
+            if (countStep > -1) {                               // don't clear start position step
+              uint8_t* note = &noteSeq[currentSeq][countStep];  // pointer to current note
+              if (!drumMode) {
+                if (*note > 0 && *note <= 127) *note += 127;  // if note is active, disable note
+              } else *note = 0;                               // drum mode -> clear
+              PrintAlertNotifi(7);                            // print clear step notification
             }
           }
         }
@@ -3420,6 +3450,12 @@ void ButtonsCommands(bool anypressed) {  // manage buttons' commands
       }
 
       else if (menuitem == 4) TapTempo();  // trigger tap tempo
+      else if (menuitem == 5) {            // drum mixer
+        if (drumMode) {
+          DrumNotesMixer[curpos] = !DrumNotesMixer[curpos];
+          SubmenuSettings(menuitem, -1);  // refresh submenu page
+        }
+      }
     }
 
     else if (newyellowstate) SubmenuSettings(menuitem, 0);  // down direction
