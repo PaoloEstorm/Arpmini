@@ -57,7 +57,7 @@ int MIDI_::getInterface(uint8_t* interfaceNum) {
 }
 
 uint8_t MIDI_::getShortName(char* name) {
-	
+
 	return 0;
 }
 
