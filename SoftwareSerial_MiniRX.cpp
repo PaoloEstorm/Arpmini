@@ -11,8 +11,7 @@ ISR(PCINT0_vect) {
 }
 
 SoftwareSerial::SoftwareSerial(uint8_t receivePin)
-  :
-    _enable(1) {
+  : _enable(1) {
   setRX(receivePin);
 }
 
@@ -60,7 +59,7 @@ int16_t SoftwareSerial::read() {
 
 void SoftwareSerial::recv() {
 
-  #if GCC_VERSION < 40302
+#if GCC_VERSION < 40302
   // Work-around for avr-gcc 4.3.0 OSX version bug
   // Preserve the registers that the compiler misses
   // (courtesy of Arduino forum user *etracer*)
@@ -73,7 +72,7 @@ void SoftwareSerial::recv() {
     "push r23 \n\t"
     "push r26 \n\t"
     "push r27 \n\t" ::);
-    #endif
+#endif
 
   uint8_t d = 0;
 
@@ -90,7 +89,7 @@ void SoftwareSerial::recv() {
     }
 
     uint8_t next = (_receive_buffer_tail + 1) % _SS_MAX_RX_BUFF;
-    
+
     if (next != _receive_buffer_head) {
       _receive_buffer[_receive_buffer_tail] = d;  // save new data in buffer: tail points to where byte goes
       _receive_buffer_tail = next;                // next byte
@@ -101,7 +100,7 @@ void SoftwareSerial::recv() {
     *_pcint_maskreg |= _pcint_maskvalue;
   }
 
-  #if GCC_VERSION < 40302
+#if GCC_VERSION < 40302
   // Work-around for avr-gcc 4.3.0 OSX version bug
   // Restore the registers that the compiler misses
   asm volatile(
@@ -113,7 +112,7 @@ void SoftwareSerial::recv() {
     "pop r20 \n\t"
     "pop r19 \n\t"
     "pop r18 \n\t" ::);
-  #endif
+#endif
 }
 
 void SoftwareSerial::handle_interrupt() {
