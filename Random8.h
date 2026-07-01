@@ -1,3 +1,5 @@
+#include <stdint.h>
+#include <Arduino.h>
 
 class Random8 {
 public:
