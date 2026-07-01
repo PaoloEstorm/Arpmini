@@ -1,3 +1,5 @@
+#include <stdint.h>
+#include <Arduino.h>
 
 // vocabulary
 const char space[] PROGMEM = " ";
@@ -61,6 +63,7 @@ const char printdone[] PROGMEM = "DONE";
 const char printfree[] PROGMEM = "FREE";
 const char printroll[] PROGMEM = "ROLL";
 const char printpedal[] PROGMEM = "PEDAL";
+const char printcount[] PROGMEM = "COUNT";
 const char fullbox[] PROGMEM = "[";
 const char emptybox[] PROGMEM = "]";
 const char fullselectedbox[] PROGMEM = "(";
