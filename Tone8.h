@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include <Arduino.h>
 
 volatile long _number_toggles;
@@ -27,7 +28,7 @@ public:
   void tone(uint32_t frequency, uint16_t duration) {  // play tune
 
     long toggle_count = (8 * frequency * duration) / 1000;  // ×4 more interrupts
-    uint16_t ocr = (F_CPU / frequency / 8) - 1;               // ISR rate ×4 slower toggle
+    uint16_t ocr = (F_CPU / frequency / 8) - 1;             // ISR rate ×4 slower toggle
 
     OCR3A = ocr;
     _number_toggles = toggle_count;
@@ -36,7 +37,8 @@ public:
 
   uint16_t midiToFreq(uint8_t note) {  // convert MIDI note to frequency
 
-    static const uint16_t freqs[12] PROGMEM = {    // Base frequencies
+    // Base frequencies
+    static const uint16_t freqs[12] PROGMEM = {
       261, 277, 293, 311, 329, 349,
       370, 392, 415, 440, 466, 494
     };
