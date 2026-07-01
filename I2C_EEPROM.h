@@ -44,7 +44,7 @@ public:
 
 private:
 
-  void I2C_wait() { 
+  void I2C_wait() {
 
     I2C_stop();
 
@@ -54,7 +54,7 @@ private:
       uint8_t status = TWSR & 0xF8;
       if (status == 0x18) break;  // If ACK received, EEPROM is ready
       I2C_stop();
-      TCTask();  // <-- do this while waiting for writing to complete
+      TCTask();   // <-- do this while waiting for writing to complete
       TCTask2();  // <-- do this while waiting for writing to complete
     }
 
