@@ -169,8 +169,8 @@ protected:
 	int getDescriptor(USBSetup& setup);
 	/// Optional interface usb setup callback, current implementation returns false
 	bool setup(USBSetup& setup);
-  /// MIDI Device short name, just returns 0
-  uint8_t getShortName(char* name);
+	/// MIDI Device short name, just returns 0
+	uint8_t getShortName(char* name);
 
 public:
 	/// Creates a MIDI USB device with 2 endpoints
