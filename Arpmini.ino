@@ -2,9 +2,9 @@
  *  @file       Arpmini.ino
  *  Project     Estorm - Arpmini
  *  @brief      MIDI Sequencer & Arpeggiator
- *  @version    2.34
+ *  @version    2.35
  *  @author     Paolo Estorm
- *  @date       2025/10/26
+ *  @date       2026/06/29
  *  @license    GPL v3.0 
  *
  *  This program is free software: you can redistribute it and/or modify
@@ -25,7 +25,7 @@
 // https://brendanclarke.com/wp/2014/04/23/arduino-based-midi-sequencer/
 
 // system
-const char version[] PROGMEM = "V2.34";
+const char version[] PROGMEM = "V2.35";
 #include "Vocabulary.h"
 #include "Random8.h"
 Random8 Random;
@@ -34,14 +34,13 @@ Random8 Random;
 #include <avr/wdt.h>
 
 // LEDs
-#define yellowLED 2  // yellow LED pin
-#define redLED 3     // red LED pin
-#define greenLED 4   // green LED pin
-#define blueLED 5    // blue LED pin
+#define redLED 0
+#define yellowLED 1
+#define blueLED 2
+#define greenLED 3
 
-const uint8_t LEDs[4] = {
-  redLED, yellowLED, blueLED, greenLED
-};
+volatile uint8_t* const ledPort[4] = { &PORTD, &PORTD, &PORTC, &PORTD };  // red, yellow, blue, green
+const uint8_t ledBit[4] = { _BV(PD0), _BV(PD1), _BV(PC6), _BV(PD4) };     // matching bits
 
 // sound
 uint8_t soundmode = 1;      // 1 audio on, 2 ui sounds off, 3 off
@@ -55,6 +54,7 @@ Tone8 tone8;
 SPI_OLED oled;                   // screen initialization
 bool StartScreenTimer = true;    // activate the screen-on timer
 bool alertnotification = false;  // keep track of notifications, timeout timer
+uint8_t safeNotification = 0;    // print notification from timer interrupt without glitches
 
 // memory
 #define memorySlots 60   // max number of songs (max 99) (absolute max is 110 but with graphical glitches)
@@ -77,8 +77,6 @@ int8_t syncport = 1;                                   // activate midi-in sync 
 #define greenbutton 8   // green button pin
 #define bluebutton 9    // blue button pin
 
-const uint8_t buttonPins[4] = { yellowbutton, redbutton, greenbutton, bluebutton };
-
 bool EnableButtons = true;  // if controlled externally (by CC) disable all buttons
 uint8_t greentristate = 1;  // 0=off, 1=null, 2=on
 bool redstate = false;      // is redbutton pressed?
@@ -86,12 +84,14 @@ bool yellowstate = false;   // is yellowbutton pressed?
 bool greenstate = false;    // is greenbutton pressed?
 bool bluestate = false;     // is bluebutton pressed?
 
-uint8_t buttonCC[4];             // 0=red, 1=yellow, 2=blue, 3=green
+uint8_t buttonCC[4];             // midi CC value for each button
 int8_t numbuttonspressedCC = 0;  // number of externally pressed buttons
 uint8_t mapButtonSelect = 0;     // 0=red, 1=yellow, 2=blue, 3=green
 
 // menu
-uint8_t menuitem = 2;        // is the number associated with every voice in the main menu. 0 to 18
+const uint8_t NUM_MENUITEMS = 21 - 1;  // number of menu items
+
+uint8_t menuitem = 2;        // the current menu item
 uint8_t menunumber = 0;      // 0=mainscreen, 1=menu, 2=submenu, 3=file manager, 4=popups, 5=editor, 6=notifications
 uint8_t savemode = 0;        // 0=bake, 1=clone, 2=new, 3=save, 4=load, 5=delete
 uint8_t savecurX = 0;        // cursor position in file manager, 0-5
@@ -103,6 +103,7 @@ bool StartMenuTimer = true;  // activate the go-to-menu timer
 uint8_t Jittercur = 0;       // cursor position in the jitter submenu
 bool cloneCur = false;       // cursor position in the clone seq submenu
 bool editorPopup = false;    // normal popup or in editor popup?
+bool selectORclear = false;  // seq select popup  // clear current seq or seq select popup? false = select, true = clear
 uint8_t currentSeqEdit = 0;  // sequence that you are editing in editor
 uint8_t colum;               // vertical position in editor
 uint8_t row;                 // orizontal position in editor
@@ -111,96 +112,99 @@ uint8_t window;              // orizontal page/section in editor
 uint8_t sidemenuitem = 1;    // selected item in the note editor's side-menu (0=transp. octave, 1=transp. note, 2=shift sequence)
 
 // time keeping
-bool playing = false;              // is the sequencer playing?
-uint8_t clockTimeout;              // variable for keeping track of external/internal clock
-bool internalClock = true;         // is the sequencer using the internal clock?
-uint8_t StepSpeed = 3;             // 0=1/48, 1=1/32, 2=1/24, 3=1/16, 4=1/12, 5=1/8, 6=1/6, 7=1/4
-bool FixSync = false;              // re-allign the sequence when changing step-speeds
-uint8_t sendrealtime = 1;          // send midi realtime messages. 0=off, 1=on (@internalclock, only if playing), 2=on (@internalclock, always)
-uint8_t tSignature = 4;            // time signature for LED indicator/metronome and beats, 1 - 8 (1*/4, 2*/4..to 8/4)
-int8_t countBeat;                  // keep track of the time beats
-int8_t countStep;                  // keep track of note steps in seq/song mode
-int8_t IntercountStep;             // keep track of note steps while inter-recording
-volatile bool stepEnable = false;  // keep track of internal timer ticks
-int8_t countTicks;                 // clock ticks counter for notes timing
-int8_t globalTicks;                // clock ticks counter for global timing & reference
-uint8_t ticksPerStep = 6;          // how many clock ticks (countTicks) before the sequencer moves to the next step
-uint8_t flip = 6;                  // part of the frameperstep's flipflop
-uint8_t flop = 6;                  // part of the frameperstep's flipflop
-bool flipflopEnable;               // switch for the frameperstep's flipflop
-bool swing = false;                // is swing enabled?
-bool snapmode = 0;                 // when play/stop the next sequence in live mode. 0=pattern, 1=beat
-bool start = false;                // dirty fix for a ableton live 10 bug. becomes true once at sequence start and send a sync command
-uint8_t BPM = 120;                 // beats per minute for internalclock - min 20, max 250 bpm
-const uint8_t iterations = 8;      // how many BPM "samples" to averege out for the tap tempo. more = more accurate
-uint8_t BPMbuffer[iterations];     // BPM "samples" buffer for tap tempo
+bool playing = false;               // is the sequencer playing?
+uint8_t clockTimeout;               // variable for keeping track of external/internal clock
+bool internalClock = true;          // is the sequencer using the internal clock?
+uint8_t StepSpeed = 3;              // 0=1/48, 1=1/32, 2=1/24, 3=1/16, 4=1/12, 5=1/8, 6=1/6, 7=1/4
+bool FixSync = false;               // re-allign the sequence when changing step-speeds
+uint8_t sendrealtime = 1;           // send midi realtime messages. 0=off, 1=on (@internalclock, only if playing), 2=on (@internalclock, always)
+uint8_t tSignature = 4;             // time signature for LED indicator/metronome and beats, 1 - 8 (1*/4, 2*/4..to 8/4)
+int8_t countBeat;                   // keep track of the time beats
+int8_t countStep;                   // keep track of note steps in seq/song mode
+int8_t IntercountStep;              // keep track of note steps while inter-recording
+volatile bool stepEnable = false;   // keep track of internal timer ticks
+int8_t countTicks;                  // clock ticks counter for notes timing
+int8_t globalTicks;                 // clock ticks counter for global timing & reference
+uint8_t ticksPerStep = 6;           // how many clock ticks (countTicks) before the sequencer moves to the next step
+uint8_t flip = 6;                   // part of the frameperstep's flipflop
+uint8_t flop = 6;                   // part of the frameperstep's flipflop
+bool flipflopEnable;                // switch for the frameperstep's flipflop
+bool swing = false;                 // is swing enabled?
+bool snapmode = 0;                  // when play/stop the next sequence in live mode. 0=pattern, 1=beat
+bool start = false;                 // dirty fix for a ableton live 10 bug. becomes true once at sequence start and send a sync command
+uint8_t BPM = 120;                  // beats per minute for internalclock - min 20, max 250 bpm
+const uint8_t TAP_ITERATIONS = 8;   // how many BPM "samples" to averege out for the tap tempo. more = more accurate
+uint8_t BPMbuffer[TAP_ITERATIONS];  // BPM "samples" buffer for tap tempo
 
 // arpeggiator
-const uint8_t holdNotes = 10;    // maximum number of notes that can be arpeggiated
-uint8_t activeNotes[holdNotes];  // contains the MIDI notes the arpeggiator plays
-bool ArpDirection;               // alternate up-down for arpstyle 2, 3, 4 & 5
-uint8_t arpstyle = 0;            // 0=up, 1=down, 2=up-down, 3=down-up, 4=up+down, 5=down+up, 6=random
-uint8_t arpcount;                // number of times the arpeggio repeats
-uint8_t arprepeat = 1;           // number of times the arpeggios gets trasposed by "stepdistance"
-int8_t stepdistance = 12;        // distance in semitones between each arp repeat, -12 to +12
-int8_t numNotesHeld = 0;         // how many notes are currently pressed on the keyboard
-uint8_t numActiveNotes = 0;      // number of notes currently stored in the holdNotes array
-uint8_t trigMode = 0;            // 0=hold, 1=trigger, 2=retrigged
-bool strum = false;              // strum mode enabled?
+const uint8_t MAX_ARPNOTES = 10;    // maximum number of notes that can be arpeggiated
+uint8_t activeNotes[MAX_ARPNOTES];  // contains the MIDI notes the arpeggiator plays
+bool ArpDirection;                  // alternate up-down for arpstyle 2, 3, 4 & 5
+uint8_t arpstyle = 0;               // 0=up, 1=down, 2=up-down, 3=down-up, 4=up+down, 5=down+up, 6=random
+uint8_t arpcount;                   // number of times the arpeggio repeats
+uint8_t arprepeat = 1;              // number of times the arpeggios gets trasposed by "stepdistance"
+int8_t stepdistance = 12;           // distance in semitones between each arp repeat, -12 to +12
+int8_t numNotesHeld = 0;            // how many notes are currently pressed on the keyboard
+uint8_t numActiveNotes = 0;         // number of notes currently stored in the activeNotes array
+uint8_t trigMode = 0;               // 0=hold, 1=trigger, 2=retrigged
+bool strum = false;                 // strum mode enabled?
 
 // sequencer
-bool recording = false;                          // is the sequencer in the recording state?
-bool keybTransp = true;                          // enable transpose by key? (only rec, song & live mode)
-const uint8_t keybBaseNote = 48;                 // for transpose by key, the sequence is transposed based on the note C3 (midi note 48)
-uint8_t keybTransposeNote = 48;                  // the last note number received for transposing the sequence
-uint8_t seqLength = 16;                          // the number of steps the sequence is looped for - can be less than maxSeqLength
-uint8_t NewSeqLength = 16;                       // 1-32 seq.length of the newly created song
-uint8_t currentSeq = 0;                          // the currently selected sequence row from the big matrix below. 0=seq1, 1=seq2, 2=seq3, 3=seq4
-uint8_t newcurrentSeq = 0;                       // the next sequence is going to play in live mode. 0-7
-uint8_t currentSeqDestination = 0;               // destination sequence for the cloning function
-uint8_t currentSeqSource = 0;                    // source sequence for the cloning function
-const uint8_t maxSeqLength = 32;                 // the total possible number of steps (columns in the big matrix below)
-const uint8_t numberSequences = 8;               // the number of total sequences
-uint8_t noteSeq[numberSequences][maxSeqLength];  // sequences arrays
-const uint8_t patternLength = 8;                 // number of patterns
-uint8_t songPattern[patternLength];              // pattern array
-int8_t pattern = 0;                              // currently playing pattern
-bool chainrec = false;                           // sequential recording in song mode?
-bool lockpattern = false;                        // block the current pattern from sequencing
-bool nopattern = false;                          // inhibit current pattern from sequencing only once
-bool updatePatternCursor = false;                // update pattern cursor avoiding indirect recursive call
+bool recording = false;                         // is the sequencer in the recording state?
+bool countOff_Enable = true;                    // start recording after a countdown?
+bool trig_countOff = false;                     // trigger the count-off
+uint8_t countOff_Count = 0;                     // keep track of the count-off count
+bool keybTransp = true;                         // enable transpose by key? (only rec, song & live mode)
+const uint8_t KEYB_BASENOTE = 48;               // for transpose by key, the sequence is transposed based on the note C3 (midi note 48)
+uint8_t keybTransposeNote = 48;                 // the last note number received for transposing the sequence
+uint8_t seqLength = 16;                         // the number of steps the sequence is looped for
+uint8_t NewSeqLength = 16;                      // 1-32 seq.length of the newly created song
+uint8_t currentSeq = 0;                         // the currently selected sequence. 0-7
+uint8_t newcurrentSeq = 0;                      // the next sequence is going to play in live mode. 0-7
+uint8_t currentSeqDestination = 0;              // destination sequence for the cloning function
+uint8_t currentSeqSource = 0;                   // source sequence for the cloning function
+const uint8_t MAX_SEQLENGTH = 32;               // the maximum possible number of steps
+const uint8_t NUM_SEQUENCES = 8;                // the number of total sequences
+uint8_t noteSeq[NUM_SEQUENCES][MAX_SEQLENGTH];  // sequences arrays
+const uint8_t NUM_PATTERNS = 8;                 // number of patterns
+uint8_t songPattern[NUM_PATTERNS];              // pattern array
+int8_t pattern = 0;                             // currently playing pattern
+bool chainrec = false;                          // sequential recording in song mode?
+bool lockpattern = false;                       // block the current pattern from sequencing
+bool nopattern = false;                         // inhibit current pattern from sequencing only once
+bool updatePatternCursor = false;               // update pattern cursor avoiding indirect recursive call
 
 // notes
-int8_t pitch = 0;                   // pitch transposition: -12 to +12
-bool pitchmode = false;             // 0=before scale, 1=scale root
-uint8_t scale = 0;                  // 0=linear, 1=penta.major, 2=penta.minor, 3=major, 4=minor, 5=harmonic minor, 6=locrian, 7=lydian, 8=dorian, 9=phrygian, 10=inverted, 11=hexatonal
-int8_t posttranspose = 0;           // post-scale pitch transposition: -12 to +12
-uint8_t noteLengthSelect = 3;       // set the notelength, 0=random, 1=10%, 2=30%, 3=50%, 4=70%, 5=90%, 6=110%
-bool longRandomLength = true;       // allow the longest (110%) length when random notelength is selected
-bool sortnotes = true;              // sort the ActiveNotes array?
-bool muted = false;                 // suspend playing any notes from the sequencer (global)
-bool lockmute = false;              // keep muted. only in arp, seq & song mode
-bool suspended = false;             // temporarily suspend playing any notes from the sequencer (only rec & live mode)
-bool scheduleSuspend = false;       // toggle the "suspended" state in sync according to the snapmode, in live mode
-bool enableSustain = true;          // enable sustain pedal functionalities
-bool sustain = false;               // hold notes also if trigmode > 0
-const uint8_t queueLength = 8;      // the number of notes that can overlap if notelength is 120%
-int8_t cronNote[queueLength];       // stores the notes playing
-int8_t cronLength[queueLength];     // stores the amount of time a note has left to play
-uint8_t jitrange = 0;               // jitter range 0-24
-uint8_t jitprob = 0;                // jitter probability 0-10 (0-100%)
-uint8_t jitmiss = 0;                // probability of a note to be not played (0-90%)
-uint8_t shiftSeq[numberSequences];  // keep track of how much each sequence has been shifted
+int8_t pitch = 0;                 // pitch transposition: -12 to +12
+bool pitchmode = false;           // 0=before scale, 1=scale root
+uint8_t scale = 0;                // 0=linear, 1=penta.major, 2=penta.minor, 3=major, 4=minor, 5=harmonic minor, 6=locrian, 7=lydian, 8=dorian, 9=phrygian, 10=inverted, 11=hexatonal
+int8_t posttranspose = 0;         // post-scale pitch transposition: -12 to +12
+uint8_t noteLengthSelect = 3;     // set the notelength, 0=random, 1=10%, 2=30%, 3=50%, 4=70%, 5=90%, 6=110%
+bool longRandomLength = true;     // allow the longest (110%) length when random notelength is selected
+bool sortnotes = true;            // sort the ActiveNotes array?
+bool muted = false;               // suspend playing any notes from the sequencer (global)
+bool lockmute = false;            // keep muted. only in arp, seq & song mode
+bool suspended = false;           // temporarily suspend playing any notes from the sequencer (only rec & live mode)
+bool scheduleSuspend = false;     // toggle the "suspended" state in sync according to the snapmode, in live mode
+bool enableSustain = true;        // enable sustain pedal functionalities
+bool sustain = false;             // hold notes also if trigmode > 0
+const uint8_t QUEUE_LENGTH = 8;   // the number of notes that can overlap if notelength is 120%
+int8_t cronNote[QUEUE_LENGTH];    // stores the notes playing
+int8_t cronLength[QUEUE_LENGTH];  // stores the amount of time a note has left to play
+uint8_t jitrange = 0;             // jitter range 0-24
+uint8_t jitprob = 0;              // jitter probability 0-10 (0-100%)
+uint8_t jitmiss = 0;              // probability of a note to be not played (0-90%)
+uint8_t shiftSeq[NUM_SEQUENCES];  // keep track of how much each sequence has been shifted
 
 // drum mode
-bool drumMode = false;            // is drum mode enabled?
-bool drumModeSelect = false;      // pre-selection for drum mode
-const uint8_t drumSlots = 8;      // number of drum slots available. must be 8 (8bit)
-uint8_t DrumNotes[drumSlots];     // midi notes associated to each drum slot
-bool ActiveDrumNotes[drumSlots];  // keep track of the currently pressed midi drum notes
-bool DrumNotesMixer[drumSlots];   // enable/disable drum slot
-bool drumroll = false;            // repeat note while key is pressed?
-uint8_t drumKeybMode = 1;         // 0=free, 1=sync, 2=roll, 3=mixer
+bool drumMode = false;             // is drum mode enabled?
+bool drumModeSelect = false;       // pre-selection for drum mode
+const uint8_t DRUM_SLOTS = 8;      // number of drum slots available. must be 8 (8bit) do not change!
+uint8_t DrumNotes[DRUM_SLOTS];     // midi notes associated to each drum slot
+bool ActiveDrumNotes[DRUM_SLOTS];  // keep track of the currently pressed midi drum notes
+bool DrumNotesMixer[DRUM_SLOTS];   // enable/disable drum slot
+bool drumroll = false;             // repeat note while key is pressed?
+uint8_t drumKeybMode = 1;          // 0=free, 1=sync, 2=roll, 3=mixer
 
 // general
 uint8_t modeselect = 0;     // 0=arp.mode, 1=rec.mode, 2=song mode, 3=live mode
@@ -265,10 +269,19 @@ void setup() {  // initialization setup
   MIDI.setHandleSongPosition(HandleSongPosition);
   MIDI2.setHandleSongPosition(HandleSongPosition);
 
-  for (uint8_t i = 0; i < 4; i++) {
-    pinMode(LEDs[i], OUTPUT);              // initialize LEDs
-    pinMode(buttonPins[i], INPUT_PULLUP);  // initialize buttons
-  }
+  // led pins as output
+  DDRD |= _BV(PD0) | _BV(PD1) | _BV(PD4);  // red, yellow, green
+  DDRC |= _BV(PC6);                        // blue
+
+  // button pins as input
+  DDRD &= ~_BV(PD7);               // yellow, pin 6
+  DDRE &= ~_BV(PE6);               // red, pin 7
+  DDRB &= ~(_BV(PB4) | _BV(PB5));  // green + blue, pin 8/9
+
+  // enable internal pullups
+  PORTD |= _BV(PD7);             // yellow
+  PORTE |= _BV(PE6);             // red
+  PORTB |= _BV(PB4) | _BV(PB5);  // green + blue
 
   tone8.init();  // speaker initialization
 
@@ -306,7 +319,9 @@ void setup() {  // initialization setup
 
 void safedigitalWrite(uint8_t pin, bool state) {  // avoid digitalwrite and i2c at the same time (external eeprom)
 
-  if (!EEPROM2.busy) digitalWrite(pin, state);
+  if (EEPROM2.busy && pin <= 1) return;  // red and yellow leds share i2c pins, skip while bus busy
+  if (state) *ledPort[pin] |= ledBit[pin];
+  else *ledPort[pin] &= ~ledBit[pin];
 }
 
 void SystemReset() {  // restart system
@@ -384,7 +399,14 @@ void PrintLiveObjects() {  // update main screen objects
     PrintPatternSequenceCursor();
   }
 
-  AlertTimeout();  // check if is time to close the notification
+  if (safeNotification) {  // print notification from timer interrupt without clitches
+    static uint8_t noti = 0;
+    noti = safeNotification;
+    safeNotification = false;
+    PrintAlertNotifi(noti);
+  }
+
+  AlertTimeout();  // check if is time to close a notification
 }
 
 void loop() {  // run repeatedly
@@ -430,8 +452,8 @@ void ResetEEPROM() {  // initialize the EEPROM with default values
 
 uint16_t eepromaddress(uint16_t address, uint8_t slot) {  // calculate eeprom song addresses
 
-  const uint16_t slotsize = (numberSequences * maxSeqLength) + 16 + 16;
-  return (slotsize * slot) + address;
+  const uint16_t SLOTSIZE = (NUM_SEQUENCES * MAX_SEQLENGTH) + 16 + 16;
+  return (SLOTSIZE * slot) + address;
 }
 
 void PcSync(uint8_t data) {  // exchange data with PC (Arpmini Editor)
@@ -441,7 +463,7 @@ void PcSync(uint8_t data) {  // exchange data with PC (Arpmini Editor)
   static uint8_t slot = 0;
   bool stop = false;
   static uint16_t writeIndex = 32;
-  const uint16_t SIZE_SLOT = 320 - 1;  // 32 bytes system + 288 song data -1
+  const uint16_t SLOT_OFFSET = 320 - 1;  // 32 bytes system + 288 song data -1
 
   // recieved commands
   const uint8_t CMD_CHECK_SLOT = 0xfc;
@@ -474,7 +496,7 @@ void PcSync(uint8_t data) {  // exchange data with PC (Arpmini Editor)
     }
 
     else if (mode == CMD_READ_SLOT) {  // read entire slot
-      for (uint16_t i = 32; i <= SIZE_SLOT; i++) {
+      for (uint16_t i = 32; i <= SLOT_OFFSET; i++) {
         uint8_t _data = EEPROM2.read(eepromaddress(i, slot - 1));
         if (_data != 0xff) Serial.write(_data);
         else Serial.write((uint8_t)0x00);
@@ -487,7 +509,7 @@ void PcSync(uint8_t data) {  // exchange data with PC (Arpmini Editor)
       if (data != 0xff) {
         EEPROM2.update((eepromaddress(writeIndex, slot - 1)), data);
         Serial.write(CMD_WRITE_SLOT);  // write confirmation
-        if (writeIndex < SIZE_SLOT) writeIndex++;
+        if (writeIndex < SLOT_OFFSET) writeIndex++;
         else stop = true;
       } else stop = true;
     }
@@ -507,14 +529,14 @@ void PcSync(uint8_t data) {  // exchange data with PC (Arpmini Editor)
 void AllLedsOn() {  // turn ON all LEDs
 
   for (uint8_t i = 0; i <= 3; i++) {
-    safedigitalWrite(LEDs[i], HIGH);
+    safedigitalWrite(i, HIGH);
   }
 }
 
 void AllLedsOff() {  // turn OFF all LEDs
 
   for (uint8_t i = 0; i <= 3; i++) {
-    safedigitalWrite(LEDs[i], LOW);
+    safedigitalWrite(i, LOW);
   }
 }
 
@@ -548,18 +570,18 @@ void GoToMenuTimer() {  // greenbutton longpress, enter the menu
 
 void AlertTimeout() {  // automatically turn OFF notifications
 
-  static unsigned long SampleMenuTime;  // time in ms at which the timer was set
-  static bool MenuTimerState;           // is the timer still running?
+  static unsigned long SampleAlertTime;  // time in ms at which the timer was set
+  static bool AlertTimerState;           // is the timer still running?
 
   if (alertnotification) {  // start the timer
     alertnotification = false;
-    MenuTimerState = true;
-    SampleMenuTime = millis();
+    AlertTimerState = true;
+    SampleAlertTime = millis();
   }
 
-  if (MenuTimerState) {
-    if (millis() - SampleMenuTime > 1000) {
-      MenuTimerState = false;
+  if (AlertTimerState) {
+    if (millis() - SampleAlertTime > 1000) {
+      AlertTimerState = false;
       if (menunumber == 0) PrintBPMBar();
     }
   }
@@ -591,7 +613,7 @@ void ScreenOnTimer() {  // automatically dim or turn OFF display
 
 void SynthReset() {  // clear note caches
 
-  for (uint8_t i = 0; i < queueLength; i++) {  // clear note queue
+  for (uint8_t i = 0; i < QUEUE_LENGTH; i++) {  // clear note queue
     cronNote[i] = -1;
     cronLength[i] = -1;
   }
@@ -603,12 +625,12 @@ void SynthReset() {  // clear note caches
 void ClearArpBuffer() {  // clear arpeggiator buffer
 
   numActiveNotes = 0;
-  for (uint8_t i = 0; i < holdNotes; i++) {  // clear the activeNotes buffer
+  for (uint8_t i = 0; i < MAX_ARPNOTES; i++) {  // clear the activeNotes buffer
     activeNotes[i] = 0;
   }
   countStep = -1;  // rewind step count
   ArpDirection = true;
-  arpcount = 0;  // ??
+  arpcount = 0;  // not sure if needed
 }
 
 void AllNotesOff() {  // send allnoteoff control change
@@ -675,14 +697,16 @@ void PrintBottomText() {  // bottom small text printing setup
 
 void Bip(uint8_t type) {  // bip sounds
 
-  if (soundmode != 3) {                          // all sounds off
-    if (soundmode == 1) {                        // include ui sounds
-      if (type == 1) tone8.tone(3136, 1);        // click
-      else if (type == 2) tone8.tone(2637, 10);  // startup/confirmation
-    }
-    if (type == 3) tone8.tone(3136, 5);       // metronome
-    else if (type == 4) tone8.tone(2349, 5);  // metronome
+  if (soundmode == 3) return;  // all sounds off
+
+  if (type == 1) {  // click
+    if (soundmode == 1) tone8.tone(3136, 1);
+  } else if (type == 2) {  // startup/confirmation
+    if (soundmode == 1) tone8.tone(2637, 10);
   }
+
+  else if (type == 3) tone8.tone(3136, 5);  // metronome
+  else if (type == 4) tone8.tone(2349, 5);  // metronome
 }
 
 void TapTempo() {  // calculate tempo based on the tapping frequency
@@ -694,16 +718,16 @@ void TapTempo() {  // calculate tempo based on the tapping frequency
 
   if (tapInterval < 1500 && tapInterval > 240) {  // if the time between taps is not too long or too short (40-250bpm)
 
-    BPMbuffer[bufferIndex] = 60200 / tapInterval;  // store iteration
-    bufferIndex = (bufferIndex + 1) % iterations;  // go to the next BPMbuffer slot
+    BPMbuffer[bufferIndex] = 60200 / tapInterval;      // store iteration
+    bufferIndex = (bufferIndex + 1) % TAP_ITERATIONS;  // go to the next BPMbuffer slot
 
     uint16_t BPMsum = 0;  // sum all iterations
-    for (uint8_t i = 0; i < iterations; i++) {
+    for (uint8_t i = 0; i < TAP_ITERATIONS; i++) {
       BPMsum += BPMbuffer[i];
     }
 
     if ((bufferIndex % 2) == 0) {     // every 2 taps
-      BPM = BPMsum / iterations;      // calculate averege
+      BPM = BPMsum / TAP_ITERATIONS;  // calculate averege
       SetBPM(BPM);                    // apply new BPM
       SubmenuSettings(menuitem, -1);  // refresh submenu page
     }
@@ -743,6 +767,8 @@ void RunClock() {  // main clock
 
   bool clockenable = !internalClock || playing;  // external clock, run the clock always. internal clock, run the clock only while playing
 
+  static bool do_countOff = false;
+
   if (modeselect < 2) {  // arp & rec mode, trigmodes logics
 
     if (trigMode == 0 || !enableSustain) sustain = false;  // if trigmode is set to "hold" disable sustain
@@ -766,7 +792,7 @@ void RunClock() {  // main clock
 
       countBeat = (countBeat + 1) % (tSignature * 2);
 
-      if (playing && countBeat % 2 == 0) {
+      if (playing && countBeat % 2 == 0) {  // every up-beat
 
         if (FixSync) {
           FixSync = false;
@@ -777,6 +803,29 @@ void RunClock() {  // main clock
         if ((menunumber == 0 && modeselect != 3) || menunumber >= 4) safedigitalWrite(yellowLED, HIGH);  // turn ON yellowled, time indicator
 
         if (recording || metro) Metronome();  // play metronome
+
+        if (trig_countOff) {                // if count-off has been triggered
+          trig_countOff = false;            // disable trigger
+          if (playing && recording) {       // if the conditions are right
+            do_countOff = true;             // activate count-off
+            safedigitalWrite(redLED, LOW);  // turn off
+          } else do_countOff = false;       // if conditions aren't right deactivate count-off
+          countOff_Count = 0;               // reset count
+        }
+
+        if (do_countOff && !recording) do_countOff = false;  // in case recording is disabled while count-off, deactivate count-off
+
+        if (do_countOff) {                    // while count-off
+          if (countOff_Count < tSignature) {  // if count is less than time signature
+            countOff_Count++;                 // count from 0 to time signature
+            safeNotification = 12;            // print count-off notification
+          } else {                            // if count is equal than time signature
+            do_countOff = false;              // deactivate count-off
+            countOff_Count = 0;               // reset count
+            safeNotification = 13;            // close count-off notification
+            safedigitalWrite(redLED, HIGH);   // turn on red led
+          }
+        }
       }
 
       if (modeselect == 3) {  // live mode
@@ -797,10 +846,10 @@ void RunClock() {  // main clock
 
         if (menunumber == 0) {  // live mode blinking
 
-          if (countBeat % 2 == 0 || scheduleSuspend) {  // blink to the beat or double while transitioning
+          if (countBeat % 2 == 0 || scheduleSuspend) {  // blink once or twice the speed while transitioning
             if (playing) {
               if (!suspended || scheduleSuspend) {
-                if (currentSeq < 4) safedigitalWrite((LEDs[currentSeq]), HIGH);  // turn ON a single LED for each sequence: 1=red, 2=yellow, 3=blue, 4=green
+                if (currentSeq < 4) safedigitalWrite(currentSeq, HIGH);  // turn ON a single LED for each sequence: 1=red, 2=yellow, 3=blue, 4=green
 
                 else if (currentSeq == 4) {  // sequence 5, turn ON yellow & red
                   safedigitalWrite(yellowLED, HIGH);
@@ -832,6 +881,8 @@ void RunClock() {  // main clock
     }
   }
 
+  if (do_countOff && recording && playing) return;
+
   if (countTicks == 0) {  // trigger new step
     if (start) {
       start = false;
@@ -840,7 +891,7 @@ void RunClock() {  // main clock
     if (modeselect == 3 || clockenable) HandleStep();  // trigger new step
   }
 
-  for (uint8_t i = 0; i < queueLength; i++) {  // decrement queued notes
+  for (uint8_t i = 0; i < QUEUE_LENGTH; i++) {  // decrement queued notes
 
     if (cronNote[i] > -1) {  // if note is queued, subtract time remaining
       cronLength[i] = cronLength[i] - SetNoteLength();
@@ -925,7 +976,7 @@ void HandleStep() {  // step sequencer
 
     if (/*!muted &&*/ playing && drumMode && (drumKeybMode == 1 || drumKeybMode == 2)) {
 
-      for (uint8_t i = 0; i < drumSlots; i++) {  // play drums in sync
+      for (uint8_t i = 0; i < DRUM_SLOTS; i++) {  // play drums in sync
         if (ActiveDrumNotes[i]) {
           if (drumKeybMode == 1) ActiveDrumNotes[i] = false;
           if (recording) {
@@ -943,7 +994,7 @@ void HandleStep() {  // step sequencer
             if (!drumMode) {
               if (*note > 0 && *note <= 127) *note += 127;  // if note is active, disable note
             } else *note = 0;                               // drum mode -> clear
-            PrintAlertNotifi(7);                            // print clear step notification // could cause screen glitch...
+            safeNotification = 7;                           // print clear step notification
           }
         }
 
@@ -968,11 +1019,11 @@ void HandleStep() {  // step sequencer
       if (note > 0) {
         if (!drumMode) {
           if (note <= 127) {
-            int8_t offset = recording ? 0 : (keybTransposeNote - keybBaseNote);
+            int8_t offset = recording ? 0 : (keybTransposeNote - KEYB_BASENOTE);
             QueueNote(note + offset);
           }
         } else {
-          for (uint8_t i = 0; i < drumSlots; i++) {
+          for (uint8_t i = 0; i < DRUM_SLOTS; i++) {
             if (bitRead(note, i)) {
               if (DrumNotesMixer[i]) QueueNote(DrumNotes[i]);  // if instrument slot not disabled, play drum note
             }
@@ -986,11 +1037,11 @@ void HandleStep() {  // step sequencer
 void HandlePattern(bool dir) {  // pattern sequencer in songmode
 
   if (!lockpattern) {
-    int8_t step = dir ? 1 : -1;  // decide direction: +1 forward, -1 backward
+    int8_t step = dir ? 1 : -1;  // select direction: +1 forward, -1 backward
 
     do {
-      pattern = (pattern + step + patternLength) % patternLength;  // move to the next pattern, wrap around with modulo
-    } while (songPattern[pattern] == 0);                           // skip empty patterns
+      pattern = (pattern + step + NUM_PATTERNS) % NUM_PATTERNS;  // move to the next pattern, wrap around with modulo
+    } while (songPattern[pattern] == 0);                         // skip empty patterns
 
     if (songPattern[pattern]) currentSeq = songPattern[pattern] - 1;  // if current pattern is active set the sequence
   }
@@ -1091,8 +1142,9 @@ void Startposition() {  // called every time the sequencing starts or stops
     globalTicks = -1;
   }
 
-  AllNotesOff();
+  if (numNotesHeld) AllNotesOff();
 
+  if (countOff_Enable) trig_countOff = true;
   countBeat = -1;
   arpcount = 0;
   countStep = -1;
@@ -1145,7 +1197,7 @@ void HandleCC(uint8_t channel, uint8_t cc, uint8_t value) {  // handle CC messag
   if (channel == midiChannel) {       // if same channel
     if ((cc != 64) && (cc != 123)) {  // if not sustain pedal or panic cc
 
-      if (menunumber == 2 && menuitem == 17) {  // if inside cc mapping menu
+      if (menunumber == 2 && menuitem == 18) {  // if inside cc mapping menu
 
         EnableButtons = true;  // just in case, re enable on-board buttons
 
@@ -1205,7 +1257,7 @@ void HandleNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle 
         Bip(2);                                // confirmation sound
       }
 
-      for (uint8_t i = 0; i < drumSlots; i++) {  // check if incoming note is in the drum notes range
+      for (uint8_t i = 0; i < DRUM_SLOTS; i++) {  // check if incoming note is in the drum notes range
 
         if (note == DrumNotes[i]) {  // if in range
 
@@ -1231,7 +1283,7 @@ void HandleNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle 
           noteSeq[currentSeqEdit][colum - 1] = note;  // store note
           PrintEditor();                              // update screen
         } else {
-          for (uint8_t i = 0; i < drumSlots; i++) {               // check currently held drum notes
+          for (uint8_t i = 0; i < DRUM_SLOTS; i++) {              // check currently held drum notes
             if (note == DrumNotes[i]) {                           // if in range
               bitToggle8(noteSeq[currentSeqEdit][colum - 1], i);  // store note
               PrintEditor();                                      // update screen
@@ -1252,7 +1304,7 @@ void HandleNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle 
         }
 
         else {
-          for (uint8_t i = 0; i < drumSlots; i++) {             // check currently held drum notes
+          for (uint8_t i = 0; i < DRUM_SLOTS; i++) {            // check currently held drum notes
             if (ActiveDrumNotes[i]) {                           // if note is held
               if (DrumNotesMixer[i]) {                          // if instrument slot not disabled
                 QueueNote(DrumNotes[i]);                        // play note
@@ -1280,7 +1332,7 @@ void HandleNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle 
 
       if (modeselect == 0) {  // arp mode
 
-        if (numActiveNotes < holdNotes) {  // store the note only if the activeNotes array is not full
+        if (numActiveNotes < MAX_ARPNOTES) {  // store the note only if the activeNotes array is not full
           activeNotes[numActiveNotes] = note;
           numActiveNotes++;  // increase notes held in buffer count
           SortArray();       // sort the activeNotes array
@@ -1290,16 +1342,17 @@ void HandleNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle 
 
       else {  // not arp mode & playing
 
-        if (recording) {                                                                                        // if playing and recording
+        if (recording) {  // if playing and recording
+
           uint8_t stepIndex = (countTicks + 2 > (ticksPerStep / 2)) ? (countStep + 1) % seqLength : countStep;  // storing destination
 
-          if (!drumMode) {
+          if (!drumMode) {                                // if note mode
             noteSeq[currentSeq][stepIndex] = note;        // store note
             if (stepIndex == countStep) QueueNote(note);  // play note
           }
 
           else {                                                        // if drum mode
-            for (uint8_t i = 0; i < drumSlots; i++) {                   // check currently held drum notes
+            for (uint8_t i = 0; i < DRUM_SLOTS; i++) {                  // check currently held drum notes
               if (ActiveDrumNotes[i]) {                                 // if note is held
                 if (DrumNotesMixer[i]) {                                // if instrument slot not disabled
                   bitSet8(noteSeq[currentSeq][stepIndex], i);           // store note
@@ -1319,11 +1372,11 @@ void HandleNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle 
             } else PrintAlertNotifi(4);  // print "keyboard disabled" notification
           }
 
-          else if (drumKeybMode == 0) {                // drum mode, if free play keybmode, play note immediately
-            for (uint8_t i = 0; i < drumSlots; i++) {  // check currently held drum notes
-              if (ActiveDrumNotes[i]) {                // if note is held
-                if (DrumNotesMixer[i]) {               // if instrument slot not disabled
-                  QueueNote(DrumNotes[i]);             // play note
+          else if (drumKeybMode == 0) {                 // drum mode, if free play keybmode, play note immediately
+            for (uint8_t i = 0; i < DRUM_SLOTS; i++) {  // check currently held drum notes
+              if (ActiveDrumNotes[i]) {                 // if note is held
+                if (DrumNotesMixer[i]) {                // if instrument slot not disabled
+                  QueueNote(DrumNotes[i]);              // play note
                 }
               }
             }
@@ -1342,7 +1395,7 @@ void HandleNoteOff(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle
     if (numNotesHeld > 0) numNotesHeld--;  // decrease notes held count
 
     if (drumMode) {
-      for (uint8_t i = 0; i < drumSlots; i++) {  // check if incoming note is in the drum notes range
+      for (uint8_t i = 0; i < DRUM_SLOTS; i++) {  // check if incoming note is in the drum notes range
         if (note == DrumNotes[i]) {
           if (drumKeybMode != 3 && DrumNotesMixer[i]) ActiveDrumNotes[i] = false;  // update array if not in mixer mode
         }
@@ -1357,11 +1410,11 @@ void HandleNoteOff(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle
 
       if (modeselect == 0 && (trigMode > 0 || strum) && !sustain) {  // arp mode and playing, remove note from buffer
 
-        for (uint8_t i = 0; i < holdNotes; i++) {  // search the released note
+        for (uint8_t i = 0; i < MAX_ARPNOTES; i++) {  // search the released note
           if (activeNotes[i] == note) {
             activeNotes[i] = 0;  // remove it from the buffer
             numActiveNotes--;
-            ShiftZeros();  // sort the activeNotes array
+            ShiftZeros();  // push all zeros to the end of activeNotes
           }
         }
       }
@@ -1373,8 +1426,8 @@ void HandleNoteOff(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle
 void SortArray() {  // sort activeNotes[]
 
   if (sortnotes) {  // sort from small to large
-    for (uint8_t i = 0; i < holdNotes - 1; i++) {
-      for (uint8_t j = 0; j < holdNotes - 1; j++) {
+    for (uint8_t i = 0; i < MAX_ARPNOTES - 1; i++) {
+      for (uint8_t j = 0; j < MAX_ARPNOTES - 1; j++) {
         if (activeNotes[j + 1] < activeNotes[j] && activeNotes[j + 1] > 0) {
           int8_t temp = activeNotes[j + 1];
           activeNotes[j + 1] = activeNotes[j];
@@ -1384,28 +1437,30 @@ void SortArray() {  // sort activeNotes[]
     }
   }
 
-  for (uint8_t i = 0; i < holdNotes - 1; i++) {  // remove any duplicates
+  for (uint8_t i = 0; i < MAX_ARPNOTES - 1; i++) {  // remove any duplicates
     if ((activeNotes[i] > 0) && (activeNotes[i] == activeNotes[i + 1])) {
       activeNotes[i + 1] = 0;
       numActiveNotes--;
     }
   }
 
-  ShiftZeros();  // push all zeros to the end of activeNotes[]
+  ShiftZeros();  // push all zeros to the end of activeNotes
 }
 
-void ShiftZeros() {  // push all zeros to the end of activeNotes[]
+void ShiftZeros() {  // push all zeros to the end of activeNotes
 
-  for (uint8_t i = 0; i < holdNotes - 1; i++) {
-    if (activeNotes[i] == 0) {
-      int8_t temp = activeNotes[i + 1];
-      activeNotes[i + 1] = activeNotes[i];
-      activeNotes[i] = temp;
+  uint8_t pos = 0;
+  for (uint8_t i = 0; i < MAX_ARPNOTES; i++) {
+    if (activeNotes[i] != 0) {
+      activeNotes[pos++] = activeNotes[i];
     }
+  }
+  while (pos < MAX_ARPNOTES) {
+    activeNotes[pos++] = 0;
   }
 }
 
-int16_t SetScale(int16_t note, uint8_t scale) {  // adapt note to fit in to a scale
+int16_t SetScale(int16_t note, uint8_t scale) {  // transpose note in to scale
 
   static const int8_t scaleOffsets[][13] PROGMEM = {
     { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },             // Scale 0: Linear
@@ -1463,7 +1518,7 @@ uint8_t TransposeAndScale(int16_t note) {  // apply transposition and scale
 
 void QueueNote(int8_t note) {  // play notes
 
-  const uint8_t defaultVelocity = 64;
+  const uint8_t DEFAULT_VELOCITY = 64;
 
   if (modeselect == 0) {  // only in arp mode, arp step transpose
     if (arpcount) note = note + ((arpcount - 1) * stepdistance);
@@ -1484,7 +1539,7 @@ void QueueNote(int8_t note) {  // play notes
 
   if (!ProbabilityMiss(jitmiss)) return;  // queue note or skip?
 
-  for (uint8_t i = 0; i < queueLength; i++) {  // if note is already stored in the queue, remove it
+  for (uint8_t i = 0; i < QUEUE_LENGTH; i++) {  // if note is already stored in the queue, remove it
     if (cronNote[i] == note && cronNote[i] >= 0) {
       SendNoteOff(cronNote[i], 0, midiChannel);
       cronNote[i] = -1;
@@ -1493,9 +1548,9 @@ void QueueNote(int8_t note) {  // play notes
     }
   }
 
-  for (uint8_t i = 0; i < queueLength; i++) {  // place note in a free slot and play it
+  for (uint8_t i = 0; i < QUEUE_LENGTH; i++) {  // place note in a free slot and play it
     if (cronLength[i] < 0) {
-      SendNoteOn(note, defaultVelocity, midiChannel);
+      SendNoteOn(note, DEFAULT_VELOCITY, midiChannel);
       cronNote[i] = note;
       cronLength[i] = 100;
       break;
@@ -1510,7 +1565,7 @@ void QueueNoteEditor(uint8_t note) {  // play notes inside editor
 
 void ManageRecording() {  // recording ending setup
 
-  keybTransposeNote = keybBaseNote;
+  keybTransposeNote = KEYB_BASENOTE;
 
   safedigitalWrite(redLED, recording);  // turn ON/OFF redLED
 
@@ -1627,22 +1682,31 @@ void SetArpStyle(uint8_t style) {  // arpeggiator algorithms
   }
 }
 
+void ClearSeq(uint8_t seq) {
+
+  for (uint8_t i = 0; i < seqLength; i++) {
+    uint8_t* note = &noteSeq[seq][i];                  // pointer to current note
+    if (drumMode) *note = 0;                           // drum mode -> clear
+    else if (*note > 0 && *note <= 127) *note += 127;  // if note is active, disable note
+  }
+}
+
 void ClearSeqPatternArray() {  // clear all pattern and sequences arrays
 
-  for (uint8_t i = 0; i < patternLength; i++) {  // clean SongPattern array
-    if (i < 4) songPattern[i] = (i + 1);         // set default 1-2-3-4-1-2-3-4
+  for (uint8_t i = 0; i < NUM_PATTERNS; i++) {  // clean SongPattern array
+    if (i < 4) songPattern[i] = (i + 1);        // set default 1-2-3-4-1-2-3-4
     else songPattern[i] = (i - 3);
   }
 
-  for (uint8_t j = 0; j < numberSequences; j++) {  // clean seq arrays
-    for (uint8_t i = 0; i < maxSeqLength; i++) {
+  for (uint8_t j = 0; j < NUM_SEQUENCES; j++) {  // clean seq arrays
+    for (uint8_t i = 0; i < MAX_SEQLENGTH; i++) {
       noteSeq[j][i] = 0;
     }
     shiftSeq[j] = 0;  // clean shift array
   }
 }
 
-void PrintSeqSelectPopup() {  // print sequence selection popups - menu 4
+void PrintSeqSelectClearPopup() {  // print sequence selection popups - menu 4
 
   menunumber = 4;
 
@@ -1652,9 +1716,14 @@ void PrintSeqSelectPopup() {  // print sequence selection popups - menu 4
     oled.drawRect(28, 32, 100, 40);
   } else oled.clear(28, 32, 100, 40);
 
-  oled.setCursorXY(36, 32);
-  oled.printF(seq);
-  oled.print(newcurrentSeq + 1);
+  if (!selectORclear) {
+    oled.setCursorXY(36, 32);
+    oled.printF(seq);
+    oled.print(newcurrentSeq + 1);
+  } else {
+    oled.setCursorXY(34, 32);
+    oled.print(F("CLEAR?"));
+  }
 
   oled.invertText(false);
 }
@@ -1717,7 +1786,7 @@ void PrintAlertNotifi(uint8_t txt) {  // print notifications
   switch (txt) {
 
     case 0:  // mixer state
-      for (uint8_t i = 0; i < drumSlots; i++) {
+      for (uint8_t i = 0; i < DRUM_SLOTS; i++) {
         oled.setCursorX((i * 16) + 2);
         char letter = 'A' + i;
         if (DrumNotesMixer[i]) oled.print(letter);  // if instrument slot not disabled
@@ -1782,7 +1851,7 @@ void PrintAlertNotifi(uint8_t txt) {  // print notifications
 
     case 10:
       {  // keyboard transpose state
-        int8_t transp = keybTransposeNote - keybBaseNote;
+        int8_t transp = keybTransposeNote - KEYB_BASENOTE;
         int8_t abstransp = transp;
         if (transp < 0) abstransp = -abstransp;
 
@@ -1802,6 +1871,18 @@ void PrintAlertNotifi(uint8_t txt) {  // print notifications
       oled.shiftX();
       oled.print(F("LOST"));
       break;
+
+    case 12:  // count-off
+      oled.setCursorX(17 + ((8 - tSignature) * 6));
+      for (uint8_t i = 0; i < tSignature; i++) {
+        if (countOff_Count <= i) oled.printF(emptybox);
+        else oled.printF(fullbox);
+      }
+      break;
+
+    case 13:  // close notification
+      PrintBPMBar();
+      break;
   }
 
   oled.invertText(false);
@@ -1809,6 +1890,7 @@ void PrintAlertNotifi(uint8_t txt) {  // print notifications
 
 void PrintBPMBar() {  // print BPM status bar to the screen
 
+  oled.invertText(false);
   oled.clear(0, 48, 127, 63);
   PrintBottomText();
 
@@ -1828,7 +1910,7 @@ void PrintBPMBar() {  // print BPM status bar to the screen
 
 void PrintPatternSequence() {  // print the sequence to the screen - song mode
 
-  for (uint8_t i = 0; i < patternLength; i++) {
+  for (uint8_t i = 0; i < NUM_PATTERNS; i++) {
     if (menunumber == 0) oled.setCursorXY((i * 16) + 2, 16);
     else oled.setCursorXY(i * 16, 30);
     if (songPattern[i] > 0) oled.print(songPattern[i]);
@@ -1859,8 +1941,8 @@ void PrintPatternSequenceCursor() {  // print the cursor to the screen - song/li
 
   else {  // live mode
 
-    static const uint8_t cursorX[8] PROGMEM = { 18, 18, 114, 114, 42, 90, 66, 66 };
-    static const uint8_t cursorY[8] PROGMEM = { 16, 32, 16, 32, 16, 16, 16, 32 };
+    static const uint8_t cursorX[8] PROGMEM = { 18, 18, 114, 114, 42, 90, 66, 66 };  // live mode cursor X position
+    static const uint8_t cursorY[8] PROGMEM = { 16, 32, 16, 32, 16, 16, 16, 32 };    // live mode cursor Y position
 
     static uint8_t lastseq = 0;  // store the previous sequence number
 
@@ -2041,33 +2123,38 @@ void PrintMenu(uint8_t item) {  // print main menu - menu 1
       oled.printF(printmode);
       break;
 
-    case 13:  // metronome
+    case 13:  // count-off
+      oled.printlnF(printcount);
+      oled.printF(off);
+      break;
+
+    case 14:  // metronome
       oled.printF(printmetro);
       break;
 
-    case 14:  // midi channel
+    case 15:  // midi channel
       oled.printF(printmidi);
       break;
 
-    case 15:  // send sync
+    case 16:  // send sync
       oled.printlnF(printsend);
       oled.printF(sync);
       break;
 
-    case 16:  // get sync
+    case 17:  // get sync
       oled.printlnF(printget);
       oled.printF(sync);
       break;
 
-    case 17:  // map buttons
+    case 18:  // map buttons
       oled.printF(printmap);
       break;
 
-    case 18:  // sound
+    case 19:  // sound
       oled.printF(printsound);
       break;
 
-    case 19:  // restart
+    case 20:  // restart
       oled.printF(printreboot);
       break;
   }
@@ -2084,7 +2171,7 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
   oled.setSize(3);
 
   if (item <= 1) oled.printF(printnext);
-  else if (item != 5 && item != 7 && item != 19) oled.printF(printback);
+  else if (item != 5 && item != 7 && item != 20) oled.printF(printback);
 
   switch (item) {
 
@@ -2156,7 +2243,7 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
           if (!Direction) {
             if (currentSeq > 0) currentSeq--;
           } else {
-            if (currentSeq < (numberSequences - 1)) currentSeq++;
+            if (currentSeq < (NUM_SEQUENCES - 1)) currentSeq++;
           }
         }
 
@@ -2172,7 +2259,7 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
 
           int8_t count = -1;
 
-          for (uint8_t i = 0; i < patternLength; i++) {  // count number of active song-patterns (minus one)
+          for (uint8_t i = 0; i < NUM_PATTERNS; i++) {  // count number of active song-patterns (minus one)
             if (songPattern[i] > 0) count++;
           }
 
@@ -2184,7 +2271,7 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
             }
           } else {
             if (Direction) {
-              if (songPattern[curpos] < numberSequences) songPattern[curpos]++;
+              if (songPattern[curpos] < NUM_SEQUENCES) songPattern[curpos]++;
             } else {
               if ((count && songPattern[curpos] > 0) || (!count && songPattern[curpos] > 1)) songPattern[curpos]--;
             }
@@ -2226,7 +2313,6 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
         int8_t step = 1 ^ (greenstate << 2);  // if green button, step becomes 5. otherwise is 1
         if (!Direction) step = -step;
         BPM += step;
-
         BPM = constrain(BPM, 20, 250);
         SetBPM(BPM);
       }
@@ -2257,7 +2343,7 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
         //-----SCREEN COMMANDS----//
         oled.printlnF(printmixer);
         oled.setSize(2);
-        for (uint8_t i = 0; i < drumSlots; i++) {
+        for (uint8_t i = 0; i < DRUM_SLOTS; i++) {
           oled.setCursorXY(i * 16, 30);
           char letter = 'A' + i;
           if (DrumNotesMixer[i]) oled.print(letter);  // if instrument slot not disabled, print slot letter
@@ -2360,7 +2446,7 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
 
         oled.setSize(2);
 
-        for (uint8_t i = 0; i < drumSlots; i++) {
+        for (uint8_t i = 0; i < DRUM_SLOTS; i++) {
           oled.setCursorXY(i * 16, 30);
           char letter = 'A' + i;
           oled.print(letter);
@@ -2458,7 +2544,7 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
         //-----BUTTONS COMMANDS----//
         if (keyEnable) {
           if (Direction) {
-            if (seqLength < maxSeqLength) seqLength++;
+            if (seqLength < MAX_SEQLENGTH) seqLength++;
           } else {
             if (seqLength > 1) seqLength--;
           }
@@ -2609,7 +2695,17 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
       }
       break;
 
-    case 13:  // metronome
+    case 13:  // count-off
+
+      //-----BUTTONS COMMANDS----//
+      if (keyEnable) countOff_Enable = Direction;
+
+      //-----SCREEN COMMANDS----//
+      oled.printlnF(printcount);
+      oled.printPtr(offonalways, countOff_Enable);
+      break;
+
+    case 14:  // metronome
 
       //-----BUTTONS COMMANDS----//
       if (keyEnable) {
@@ -2632,7 +2728,7 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
       oled.printF(fourth);
       break;
 
-    case 14:  // midi channel
+    case 15:  // midi channel
 
       //-----BUTTONS COMMANDS----//
       if (keyEnable) {
@@ -2655,7 +2751,7 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
       if (EEPROM2.read(0) == midiChannel) oled.printF(printcircle);
       break;
 
-    case 15:  // send sync
+    case 16:  // send sync
 
       //-----BUTTONS COMMANDS----//
       if (keyEnable) {
@@ -2677,7 +2773,7 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
       if (EEPROM2.read(1) == sendrealtime) oled.printF(printcircle);
       break;
 
-    case 16:  // get sync
+    case 17:  // get sync
 
       //-----BUTTONS COMMANDS----//
       if (keyEnable) {
@@ -2702,7 +2798,7 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
       if (EEPROM2.read(3) == syncport) oled.printF(printcircle);
       break;
 
-    case 17:  // map buttons
+    case 18:  // map buttons
 
       //-----BUTTONS COMMANDS----//
       if (keyEnable) {
@@ -2727,12 +2823,12 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
       for (uint8_t i = 0; i <= 3; i++) {
         if (mapButtonSelect == i) {
           oled.print(buttonCC[i]);
-          safedigitalWrite(LEDs[i], HIGH);
+          safedigitalWrite(i, HIGH);
         }
       }
       break;
 
-    case 18:  // sound
+    case 19:  // sound
 
       //-----BUTTONS COMMANDS----//
       if (keyEnable) {
@@ -2754,7 +2850,7 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
       if (EEPROM2.read(2) == soundmode) oled.printF(printcircle);
       break;
 
-    case 19:  // restart
+    case 20:  // restart
       SystemReset();
       break;
   }
@@ -3020,9 +3116,9 @@ void LoadSave(uint8_t mode, uint8_t slot) {  // (bake/clone/new/save/load/delete
     EEPROM2.update((eepromaddress(38, slot)), BPM);
     EEPROM2.update((eepromaddress(39, slot)), StepSpeed);
 
-    for (uint8_t i = 0; i < numberSequences; i++) {
+    for (uint8_t i = 0; i < NUM_SEQUENCES; i++) {
       EEPROM2.update((eepromaddress(i + 40, slot)), songPattern[i]);  // save SongPattern array
-      for (uint8_t j = 0; j < maxSeqLength; j++) {
+      for (uint8_t j = 0; j < MAX_SEQLENGTH; j++) {
         EEPROM2.update((eepromaddress(j + 48 + (32 * i), slot)), noteSeq[i][j]);  // save all seq's array
       }
       if (drumMode) EEPROM2.update((eepromaddress(i + 304, slot)), DrumNotes[i]);  // save drumNotes array
@@ -3051,9 +3147,9 @@ void LoadSave(uint8_t mode, uint8_t slot) {  // (bake/clone/new/save/load/delete
     BPM = EEPROM2.read(eepromaddress(38, slot));
     StepSpeed = EEPROM2.read(eepromaddress(39, slot));
 
-    for (uint8_t i = 0; i < numberSequences; i++) {
+    for (uint8_t i = 0; i < NUM_SEQUENCES; i++) {
       songPattern[i] = EEPROM2.read(eepromaddress(i + 40, slot));  // load SongPattern array
-      for (uint8_t j = 0; j < maxSeqLength; j++) {
+      for (uint8_t j = 0; j < MAX_SEQLENGTH; j++) {
         noteSeq[i][j] = EEPROM2.read(eepromaddress(j + 48 + (32 * i), slot));  // load all seq's array
       }
       if (drumMode) DrumNotes[i] = EEPROM2.read(eepromaddress(i + 304, slot));  // load drumNotes array
@@ -3081,14 +3177,14 @@ void LoadSave(uint8_t mode, uint8_t slot) {  // (bake/clone/new/save/load/delete
 void BakeSequence() {  // normalize transpose & scale in to current seq / all seqs
 
   if (modeselect == 1 || (modeselect == 2 && lockpattern)) {  // bake current seq array
-    for (uint8_t i = 0; i < maxSeqLength; i++) {
+    for (uint8_t i = 0; i < MAX_SEQLENGTH; i++) {
       if (noteSeq[currentSeq][i] > 0) noteSeq[currentSeq][i] = TransposeAndScale(noteSeq[currentSeq][i]);
     }
   }
 
   else {
-    for (uint8_t j = 0; j < numberSequences; j++) {  // bake all seq arrays
-      for (uint8_t i = 0; i < maxSeqLength; i++) {
+    for (uint8_t j = 0; j < NUM_SEQUENCES; j++) {  // bake all seq arrays
+      for (uint8_t i = 0; i < MAX_SEQLENGTH; i++) {
         if (noteSeq[j][i] > 0) noteSeq[j][i] = TransposeAndScale(noteSeq[j][i]);
       }
     }
@@ -3101,7 +3197,7 @@ void BakeSequence() {  // normalize transpose & scale in to current seq / all se
 
 void CloneSequence(uint8_t source, uint8_t destination) {  // copy notes from a sequence to another
 
-  for (uint8_t i = 0; i < maxSeqLength; i++) {
+  for (uint8_t i = 0; i < MAX_SEQLENGTH; i++) {
     noteSeq[destination][i] = noteSeq[source][i];
   }
 }
@@ -3179,6 +3275,17 @@ void ButtonsCommands(bool anypressed) {  // manage buttons' commands
 
   StartScreenTimer = true;  // if any button is pressed or released, start the screen timer
 
+  if (redispressed && newbluestate) {  // clear current sequence
+
+    if ((menunumber == 0 && (modeselect == 1 || modeselect == 2)) || (menunumber == 5)) {  // rec or song mode or inside editor
+      if (menunumber == 5) editorPopup = true;
+      else recording = false;  // do not enable recording
+      newbluestate = false;
+      selectORclear = true;  // clear current seq popup
+      PrintSeqSelectClearPopup();
+    }
+  }
+
   if (menunumber == 0) {  // main screen - menu 0
 
     if (newgreenstate) {  // go to menu
@@ -3235,7 +3342,10 @@ void ButtonsCommands(bool anypressed) {  // manage buttons' commands
       if (greenispressed) {  // if green is pressed
 
         if (newredstate) {  // rec or song mode, open seq. selection popup
-          if (modeselect > 0 && !recording) PrintSeqSelectPopup();
+          if (modeselect > 0 && !recording) {
+            selectORclear = false;  // seq select popup
+            PrintSeqSelectClearPopup();
+          }
         }
 
         else if (newbluestate) {  // step-recording, go backwards
@@ -3258,7 +3368,6 @@ void ButtonsCommands(bool anypressed) {  // manage buttons' commands
             lockpattern = !lockpattern;
             PrintPatternSequenceCursor();
           }
-
         }
 
         else if (newyellowstate) {  // go to start position or continue
@@ -3307,8 +3416,10 @@ void ButtonsCommands(bool anypressed) {  // manage buttons' commands
 
             if (modeselect == 0) {  // arp mode, inter-recording
               if (!recording) {
-                if (allowrec) PrintSeqSelectPopup();  // open seq. selection popup
-                else PrintAlertNotifi(2);             // print not playing notification
+                if (allowrec) {
+                  selectORclear = false;       // seq select popup
+                  PrintSeqSelectClearPopup();  // open seq. selection popup
+                } else PrintAlertNotifi(2);    // print not playing notification
               }
 
               else {
@@ -3406,7 +3517,7 @@ void ButtonsCommands(bool anypressed) {  // manage buttons' commands
     }
 
     else if (newyellowstate) {  // go down in the menu
-      if (menuitem < 19) {
+      if (menuitem < NUM_MENUITEMS) {
         menuitem++;
         PrintMenu(menuitem);
       }
@@ -3477,7 +3588,7 @@ void ButtonsCommands(bool anypressed) {  // manage buttons' commands
           uint8_t val = cloneCur ? currentSeqDestination : currentSeqSource;
 
           val += dir;
-          if (val < numberSequences) {
+          if (val < NUM_SEQUENCES) {
             if (cloneCur) currentSeqDestination = val;
             else currentSeqSource = val;
           }
@@ -3493,7 +3604,7 @@ void ButtonsCommands(bool anypressed) {  // manage buttons' commands
         }
 
         else if (newredstate) {  // increase length
-          if (NewSeqLength < maxSeqLength) {
+          if (NewSeqLength < MAX_SEQLENGTH) {
             NewSeqLength++;
           }
         }
@@ -3565,51 +3676,68 @@ void ButtonsCommands(bool anypressed) {  // manage buttons' commands
       }
     }
 
-    else if (newgreenstate) {  // set selected sequence and exit popup
+    else if (newgreenstate) {  // set selected sequence or clear current seq and exit popup
 
-      currentSeq = newcurrentSeq;
-      currentSeqEdit = newcurrentSeq;
+      if (selectORclear) {  // clear mode
 
-      if (!editorPopup) {  // if not inside editor
-
-        if (modeselect == 0) {  // arp mode, jump directly in to recording
-          IntercountStep = -1;  // reset count step for inter-recording (for arp mode)
-          recording = true;
-          ManageRecording();
+        if (editorPopup) {           // if inside editor
+          ClearSeq(currentSeqEdit);  // clear current seq
+          editorPopup = false;
+          colum = 0;
+          row = 1;
+          PrintEditor();         // exit popup
+        } else {                 // if not inside editor
+          ClearSeq(currentSeq);  // clear current seq (arp can't reach here, clear combo disabled on main screen)
+          PrintMainScreen();     // exit popup
         }
+      }
 
-        else if (modeselect == 2) {  // song mode, move to the selected sequence
+      else {  // seq select mode
 
-          pattern = -1;  // in case selected seq is not present in the pattern sequence
+        currentSeq = newcurrentSeq;  // set selected sequence
+        currentSeqEdit = newcurrentSeq;
 
-          for (uint8_t i = 0; i < patternLength; i++) {  // search the selected sequence in the pattern chain
-            if ((currentSeq + 1) == songPattern[i]) {
-              pattern = i;  // sequence found!
-              break;
+        if (editorPopup) {  // if inside editor
+          editorPopup = false;
+          colum = 0;
+          row = 1;
+          PrintEditor();  // exit popup
+        } else {          // if not inside editor
+
+          if (modeselect == 0) {  // arp mode, jump directly in to recording
+            IntercountStep = -1;  // reset count step for inter-recording (for arp mode)
+            recording = true;
+            ManageRecording();
+          }
+
+          else if (modeselect == 2) {  // song mode, move to the selected seq
+            pattern = -1;              // in case selected seq is not present in the pattern sequence
+
+            for (uint8_t i = 0; i < NUM_PATTERNS; i++) {  // search the selected sequence in the pattern chain
+              if ((currentSeq + 1) == songPattern[i]) {
+                pattern = i;  // sequence found!
+                break;
+              }
             }
           }
+
+          PrintMainScreen();  // exit popup
         }
-
-        PrintMainScreen();  // exit popup
       }
 
-      else {  // else if inside editor, close popup
-        editorPopup = false;
-        colum = 0;
-        row = 1;
-        PrintEditor();  // exit popup
-      }
       confirmsound = true;  // play confirmation sound
     }
 
     else if (newyellowstate) {  // seq. selection down
+      if (selectORclear) return;
       if (newcurrentSeq > 0) newcurrentSeq--;
-      PrintSeqSelectPopup();  // refresh seq. selection popup
+      PrintSeqSelectClearPopup();  // refresh seq. selection popup
     }
 
     else if (newredstate) {  // seq. selection up
-      if (newcurrentSeq < (numberSequences - 1)) newcurrentSeq++;
-      PrintSeqSelectPopup();  // refresh seq. selection popup
+      if (selectORclear) return;
+      if (newcurrentSeq < (NUM_SEQUENCES - 1)) newcurrentSeq++;
+      PrintSeqSelectClearPopup();  // refresh seq. selection popup
     }
   }
 
@@ -3631,7 +3759,7 @@ void ButtonsCommands(bool anypressed) {  // manage buttons' commands
           uint8_t note = noteSeq[currentSeqEdit][colum - 1];
           if (!drumMode) QueueNoteEditor(note);  // play note
           else {                                 // play beat
-            for (uint8_t i = 0; i < drumSlots; i++) {
+            for (uint8_t i = 0; i < DRUM_SLOTS; i++) {
               if (bitRead(note, i)) {
                 if (DrumNotesMixer[i]) QueueNoteEditor(DrumNotes[i]);  // if instrument slot not disabled, play drum note
               }
@@ -3660,7 +3788,7 @@ void ButtonsCommands(bool anypressed) {  // manage buttons' commands
               }
 
               else if (*note > 127) {    // if note disabled
-                *note -= 127;            // enable note
+                *note -= 127;            // re-enable note
                 QueueNoteEditor(*note);  // play note
               }
 
@@ -3756,7 +3884,8 @@ void ButtonsCommands(bool anypressed) {  // manage buttons' commands
 
       else if (!colum) {  // if side-menu, in seq selector
         editorPopup = true;
-        PrintSeqSelectPopup();  // open seq. selection popup
+        selectORclear = false;       // seq select popup
+        PrintSeqSelectClearPopup();  // open seq. selection popup
       }
 
       greentristate = 0;
@@ -3780,12 +3909,12 @@ void ButtonsCommands(bool anypressed) {  // manage buttons' commands
     }
   }
 
-  if (!(menunumber == 2 && menuitem == 17)) {  // turn ON button LED when pressed (except in CC mapping menu)
+  if (!(menunumber == 2 && menuitem == 18)) {  // turn ON button LED when pressed (except in CC mapping menu)
 
     if (!recording) {
       safedigitalWrite(redLED, redstate);
       safedigitalWrite(yellowLED, yellowstate);
-    }
+    } else if (countOff_Enable && !playing) safedigitalWrite(redLED, HIGH);
 
     safedigitalWrite(greenLED, greenstate);
 
