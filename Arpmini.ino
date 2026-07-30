@@ -2,9 +2,9 @@
  *  @file       Arpmini.ino
  *  Project     Estorm - Arpmini
  *  @brief      MIDI Sequencer & Arpeggiator
- *  @version    2.35
+ *  @version    2.36
  *  @author     Paolo Estorm
- *  @date       2026/06/29
+ *  @date       2026/07/09
  *  @license    GPL v3.0 
  *
  *  This program is free software: you can redistribute it and/or modify
@@ -25,7 +25,7 @@
 // https://brendanclarke.com/wp/2014/04/23/arduino-based-midi-sequencer/
 
 // system
-const char version[] PROGMEM = "V2.35";
+const char version[] PROGMEM = "V2.36";
 #include "Vocabulary.h"
 #include "Random8.h"
 Random8 Random;
@@ -132,6 +132,7 @@ bool flipflopEnable;                // switch for the frameperstep's flipflop
 bool swing = false;                 // is swing enabled?
 bool snapmode = 0;                  // when play/stop the next sequence in live mode. 0=pattern, 1=beat
 bool start = false;                 // dirty fix for a ableton live 10 bug. becomes true once at sequence start and send a sync command
+bool armStart = false;              // count-off: armed one beat before the recording downbeat, sends Start just before its clock
 uint8_t BPM = 120;                  // beats per minute for internalclock - min 20, max 250 bpm
 const uint8_t TAP_ITERATIONS = 8;   // how many BPM "samples" to averege out for the tap tempo. more = more accurate
 uint8_t BPMbuffer[TAP_ITERATIONS];  // BPM "samples" buffer for tap tempo
@@ -244,13 +245,14 @@ void setup() {  // initialization setup
 
   // initialize timer1 used for internal clock
   noInterrupts();
-  TCCR1A = 0;               // set TCCR1A register to 0
-  TCCR1B = 0;               // same for TCCR1B
-  TCNT1 = 0;                // initialize counter value to 0
-  OCR1A = 5208;             // initial tempo 120bpm
-  TCCR1B |= (1 << WGM12);   // turn ON CTC mode
-  TCCR1B |= (1 << CS11);    // 64 prescaler
-  TCCR1B |= (1 << CS10);    // 64 prescaler
+  TCCR1A = 0;              // set TCCR1A register to 0
+  TCCR1B = 0;              // same for TCCR1B
+  TCNT1 = 0;               // initialize counter value to 0
+  OCR1A = 5208;            // initial tempo 120bpm
+  TCCR1B |= (1 << WGM12);  // turn ON CTC mode
+  TCCR1B |= (1 << CS11);   // 64 prescaler
+  TCCR1B |= (1 << CS10);   // 64 prescaler
+  // TCCR1B |= (1 << CS12);  // prescaler 256 (~244 Hz)
   TIMSK1 |= (1 << OCIE1A);  // enable timer compare interrupt
   interrupts();
 
@@ -739,7 +741,11 @@ void TapTempo() {  // calculate tempo based on the tapping frequency
 
 void HandleInternalClock() {  // internal clock
 
-  if (internalClock) {                                                                     // normal operation, run clock
+  if (internalClock) {
+    if (playing && armStart && globalTicks == 11 && (countBeat % 2 != 0)) {  // last tick before the count-off downbeat
+      armStart = false;
+      SendRealtime(midi::Start);  // start just before the downbeat
+    }
     if ((sendrealtime == 1 && playing) || (sendrealtime == 2)) SendRealtime(midi::Clock);  // send midi clock
     RunClock();                                                                            // run clock
   }
@@ -815,15 +821,16 @@ void RunClock() {  // main clock
 
         if (do_countOff && !recording) do_countOff = false;  // in case recording is disabled while count-off, deactivate count-off
 
-        if (do_countOff) {                    // while count-off
-          if (countOff_Count < tSignature) {  // if count is less than time signature
-            countOff_Count++;                 // count from 0 to time signature
-            safeNotification = 12;            // print count-off notification
-          } else {                            // if count is equal than time signature
-            do_countOff = false;              // deactivate count-off
-            countOff_Count = 0;               // reset count
-            safeNotification = 13;            // close count-off notification
-            safedigitalWrite(redLED, HIGH);   // turn on red led
+        if (do_countOff) {                                                       // while count-off
+          if (countOff_Count < tSignature) {                                     // if count is less than time signature
+            countOff_Count++;                                                    // count from 0 to time signature
+            safeNotification = 12;                                               // print count-off notification
+            if (countOff_Count == tSignature && internalClock) armStart = true;  // set flag for the start midi message
+          } else {                                                               // if count is equal than time signature
+            do_countOff = false;                                                 // deactivate count-off
+            countOff_Count = 0;                                                  // reset count
+            safeNotification = 13;                                               // close count-off notification
+            safedigitalWrite(redLED, HIGH);                                      // turn on red led
           }
         }
       }
@@ -1073,13 +1080,11 @@ void HandleStart() {  // start message - re-start the sequence
   UpdateScreenBPM();
 }
 
-void HandleContinue() {  // continue message - start the sequence
+void HandleContinue() {  // continue message - resume from the frozen position
 
   SendRealtime(midi::Continue);  // pass through continue messages
 
   internalClock = false;
-  globalTicks = 0;
-  countTicks = 0;
   playing = true;
   UpdateScreenBPM();
 }
@@ -1110,8 +1115,8 @@ void StartAndStop() {  // manage starts and stops
   if (internalClock) {
     if (playing) {
       Startposition();
-      SendRealtime(midi::Start);
-      start = true;  // to make ableton live 10 happy
+      if (!(recording && countOff_Enable)) SendRealtime(midi::Start);  // send start only if count-off is disabled
+      start = true;                                                    // to make ableton live 10 happy
     } else SendRealtime(midi::Stop);
   } else {  // not internal clock
     AllNotesOff();
@@ -1133,18 +1138,23 @@ void HandleSongPosition(uint16_t position) {  // handle song position messages
   }
 }
 
-void Startposition() {  // called every time the sequencing starts or stops
+void Startposition() {  // called every time the sequencer starts
+
+  TCNT1 = 0;              // reset counter
+  TIFR1 |= (1 << OCF1A);  // clear pending compare match flag
+
+  FixSync = false;
 
   SetTicksPerStep();
 
-  if (!FixSync) {
-    countTicks = -1;
-    globalTicks = -1;
-  }
+  countTicks = -1;
+  globalTicks = -1;
 
   if (numNotesHeld) AllNotesOff();
 
   if (countOff_Enable) trig_countOff = true;
+
+  armStart = false;
   countBeat = -1;
   arpcount = 0;
   countStep = -1;
@@ -1181,7 +1191,7 @@ void SendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) {
   uint8_t status = 0x90 | (channel - 1);
   midiEventPacket_t noteOn = { 0x09, status, note, velocity };
   MidiUSB.sendMIDI(noteOn);
-  //tone8.tone(tone8.midiToFreq(note), 50);  // only for testing
+  //tone8.tone(tone8.midiToFreq(note), 50);  // only for demo
 }
 
 void SendNoteOff(uint8_t note, uint8_t velocity, uint8_t channel) {
@@ -1411,10 +1421,11 @@ void HandleNoteOff(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle
       if (modeselect == 0 && (trigMode > 0 || strum) && !sustain) {  // arp mode and playing, remove note from buffer
 
         for (uint8_t i = 0; i < MAX_ARPNOTES; i++) {  // search the released note
-          if (activeNotes[i] == note) {
-            activeNotes[i] = 0;  // remove it from the buffer
+          if (note > 0 && activeNotes[i] == note) {   // note>0 so empty slots (0) never match
+            activeNotes[i] = 0;                       // remove it from the buffer
             numActiveNotes--;
             ShiftZeros();  // push all zeros to the end of activeNotes
+            break;         // stop after removing the (unique) match
           }
         }
       }
@@ -1520,24 +1531,27 @@ void QueueNote(int8_t note) {  // play notes
 
   const uint8_t DEFAULT_VELOCITY = 64;
 
+  bool jitterEnable = !(recording || menunumber == 5);
+
   if (modeselect == 0) {  // only in arp mode, arp step transpose
     if (arpcount) note = note + ((arpcount - 1) * stepdistance);
   }
 
-  note = note + Jitter(jitrange, jitprob);  // apply jitter
-  note = TransposeAndScale(note);           // apply scale & transpositions
+  if (jitterEnable) note = note + Jitter(jitrange, jitprob);  // apply jitter
+  note = TransposeAndScale(note);                             // apply scale & transpositions
 
   if (modeselect == 0 && recording) {  // arp mode inter-recording
     IntercountStep++;
-    noteSeq[currentSeq][IntercountStep] = note;
-    if (IntercountStep == seqLength) {  // automatically stop recording an the end
+    if (IntercountStep >= seqLength) {  // reached the end, stop before writing out of range
       IntercountStep = 0;
       recording = false;
       ManageRecording();
+    } else {
+      noteSeq[currentSeq][IntercountStep] = note;
     }
   }
 
-  if (!ProbabilityMiss(jitmiss)) return;  // queue note or skip?
+  if (!ProbabilityMiss(jitmiss) && jitterEnable) return;  // queue note or skip?
 
   for (uint8_t i = 0; i < QUEUE_LENGTH; i++) {  // if note is already stored in the queue, remove it
     if (cronNote[i] == note && cronNote[i] >= 0) {
@@ -2160,6 +2174,16 @@ void PrintMenu(uint8_t item) {  // print main menu - menu 1
   }
 }
 
+int8_t clampAdjust(int8_t value, bool up, int8_t lo, int8_t hi) {  // increment/decrement a setting within [lo,hi]
+
+  if (up) {
+    if (value < hi) value++;
+  } else {
+    if (value > lo) value--;
+  }
+  return value;
+}
+
 void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in submenu - menu 2
 
   bool keyEnable = dir + 1;
@@ -2178,13 +2202,7 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
     case 0:  // file
 
       //-----BUTTONS COMMANDS----//
-      if (keyEnable) {
-        if (!Direction) {
-          if (savemode < 5) savemode++;
-        } else {
-          if (savemode > 0) savemode--;
-        }
-      }
+      if (keyEnable) savemode = clampAdjust(savemode, !Direction, 0, 5);
 
       //-----SCREEN COMMANDS----//
       if (modeselect == 0 && savemode < 2) savemode = 2;  // no bake or clone in arp mode
@@ -2196,13 +2214,7 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
     case 1:  // mode select
 
       //-----BUTTONS COMMANDS----//
-      if (keyEnable) {
-        if (!Direction) {
-          if (premodeselect < 3) premodeselect++;
-        } else {
-          if (premodeselect > 0) premodeselect--;
-        }
-      }
+      if (keyEnable) premodeselect = clampAdjust(premodeselect, !Direction, 0, 3);
 
       if (drumMode && premodeselect == 0) premodeselect = 1;  // arp mode not allowed in drum mode
 
@@ -2217,13 +2229,8 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
 
         //-----BUTTONS COMMANDS----//
         if (keyEnable) {
-          if (!greenstate) {
-            if (Direction) {
-              if (arpstyle > 0) arpstyle--;
-            } else {
-              if (arpstyle < 6) arpstyle++;
-            }
-          } else if (arpstyle < 6) sortnotes = Direction;
+          if (!greenstate) arpstyle = clampAdjust(arpstyle, !Direction, 0, 6);
+          else if (arpstyle < 6) sortnotes = Direction;
         }
 
         //-----SCREEN COMMANDS----//
@@ -2239,13 +2246,7 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
       else if (modeselect == 1) {  // seq.select
 
         //-----BUTTONS COMMANDS----//
-        if (keyEnable) {
-          if (!Direction) {
-            if (currentSeq > 0) currentSeq--;
-          } else {
-            if (currentSeq < (NUM_SEQUENCES - 1)) currentSeq++;
-          }
-        }
+        if (keyEnable) currentSeq = clampAdjust(currentSeq, Direction, 0, NUM_SEQUENCES - 1);
 
         //-----SCREEN COMMANDS----//
         oled.printlnF(seq);
@@ -2263,13 +2264,8 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
             if (songPattern[i] > 0) count++;
           }
 
-          if (!greenstate) {
-            if (Direction) {
-              if (curpos < 7) curpos++;
-            } else {
-              if (curpos > 0) curpos--;
-            }
-          } else {
+          if (!greenstate) curpos = clampAdjust(curpos, Direction, 0, 7);
+          else {
             if (Direction) {
               if (songPattern[curpos] < NUM_SEQUENCES) songPattern[curpos]++;
             } else {
@@ -2332,13 +2328,7 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
       if (drumMode) {  // map drum notes
 
         //-----BUTTONS COMMANDS----//
-        if (keyEnable) {
-          if (Direction) {
-            if (curpos < 7) curpos++;
-          } else {
-            if (curpos > 0) curpos--;
-          }
-        }
+        if (keyEnable) curpos = clampAdjust(curpos, Direction, 0, 7);
 
         //-----SCREEN COMMANDS----//
         oled.printlnF(printmixer);
@@ -2356,13 +2346,8 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
 
       //-----BUTTONS COMMANDS----//
       if (keyEnable) {
-        if (!greenstate) {
-          if (Direction) {
-            if (pitch < 12) pitch++;
-          } else {
-            if (pitch > -12) pitch--;
-          }
-        } else pitchmode = Direction;
+        if (!greenstate) pitch = clampAdjust(pitch, Direction, -12, 12);
+        else pitchmode = Direction;
         if (!playing) AllNotesOff();
       }
 
@@ -2387,19 +2372,8 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
       if (!drumMode) {  // scale select
         //-----BUTTONS COMMANDS----//
         if (keyEnable) {
-          if (!greenstate) {
-            if (Direction) {
-              if (scale < 12) scale++;
-            } else {
-              if (scale > 0) scale--;
-            }
-          } else {
-            if (Direction) {
-              if (posttranspose < 12) posttranspose++;
-            } else {
-              if (posttranspose > -12) posttranspose--;
-            }
-          }
+          if (!greenstate) scale = clampAdjust(scale, Direction, 0, 12);
+          else posttranspose = clampAdjust(posttranspose, Direction, -12, 12);
           if (!playing) AllNotesOff();
         }
 
@@ -2417,19 +2391,8 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
       else {  // map drum notes
         //-----BUTTONS COMMANDS----//
         if (keyEnable) {
-          if (!greenstate) {
-            if (Direction) {
-              if (curpos < 7) curpos++;
-            } else {
-              if (curpos > 0) curpos--;
-            }
-          } else {
-            if (Direction) {
-              if (DrumNotes[curpos] < 127) DrumNotes[curpos]++;
-            } else {
-              if (DrumNotes[curpos] > 0) DrumNotes[curpos]--;
-            }
-          }
+          if (!greenstate) curpos = clampAdjust(curpos, Direction, 0, 7);
+          else DrumNotes[curpos] = clampAdjust(DrumNotes[curpos], Direction, 0, 127);
           QueueNoteEditor(DrumNotes[curpos]);
         }
 
@@ -2461,30 +2424,11 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
 
       //-----BUTTONS COMMANDS----//
       if (keyEnable) {
-        if (!greenstate) {
-          if (!Direction) {
-            if (Jittercur < 2) Jittercur++;
-          } else {
-            if (Jittercur > 0) Jittercur--;
-          }
-        } else {
-          if (Direction) {
-            if (Jittercur == 0) {
-              if (jitrange < 24) jitrange++;
-            } else if (Jittercur == 1) {
-              if (jitprob < 10) jitprob++;
-            } else {
-              if (jitmiss < 9) jitmiss++;
-            }
-          } else {
-            if (Jittercur == 0) {
-              if (jitrange > 0) jitrange--;
-            } else if (Jittercur == 1) {
-              if (jitprob > 0) jitprob--;
-            } else {
-              if (jitmiss > 0) jitmiss--;
-            }
-          }
+        if (!greenstate) Jittercur = clampAdjust(Jittercur, !Direction, 0, 2);
+        else {
+          if (Jittercur == 0) jitrange = clampAdjust(jitrange, Direction, 0, 24);
+          else if (Jittercur == 1) jitprob = clampAdjust(jitprob, Direction, 0, 10);
+          else jitmiss = clampAdjust(jitmiss, Direction, 0, 9);
         }
       }
 
@@ -2516,13 +2460,8 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
 
       //-----BUTTONS COMMANDS----//
       if (keyEnable) {
-        if (!greenstate) {
-          if (Direction) {
-            if (noteLengthSelect < 6) noteLengthSelect++;
-          } else {
-            if (noteLengthSelect > 0) noteLengthSelect--;
-          }
-        } else if (noteLengthSelect == 0) longRandomLength = Direction;
+        if (!greenstate) noteLengthSelect = clampAdjust(noteLengthSelect, Direction, 0, 6);
+        else if (noteLengthSelect == 0) longRandomLength = Direction;
       }
 
       //-----SCREEN COMMANDS----//
@@ -2542,13 +2481,7 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
       if (modeselect != 0) {
 
         //-----BUTTONS COMMANDS----//
-        if (keyEnable) {
-          if (Direction) {
-            if (seqLength < MAX_SEQLENGTH) seqLength++;
-          } else {
-            if (seqLength > 1) seqLength--;
-          }
-        }
+        if (keyEnable) seqLength = clampAdjust(seqLength, Direction, 1, MAX_SEQLENGTH);
 
         //-----SCREEN COMMANDS----//
         oled.printlnF(length);
@@ -2558,19 +2491,8 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
 
         //-----BUTTONS COMMANDS----//
         if (keyEnable) {
-          if (!greenstate) {
-            if (Direction) {
-              if (arprepeat < 5) arprepeat++;
-            } else {
-              if (arprepeat > 1) arprepeat--;
-            }
-          } else {
-            if (Direction) {
-              if (stepdistance < 12) stepdistance++;
-            } else {
-              if (stepdistance > -12) stepdistance--;
-            }
-          }
+          if (!greenstate) arprepeat = clampAdjust(arprepeat, Direction, 1, 5);
+          else stepdistance = clampAdjust(stepdistance, Direction, -12, 12);
         }
 
         //-----SCREEN COMMANDS----//
@@ -2588,11 +2510,7 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
       //-----BUTTONS COMMANDS----//
       if (keyEnable) {
         if (!greenstate) {
-          if (Direction) {
-            if (StepSpeed > 0) StepSpeed--;
-          } else {
-            if (StepSpeed < 7) StepSpeed++;
-          }
+          StepSpeed = clampAdjust(StepSpeed, !Direction, 0, 7);
           if (playing) FixSync = true;
         } else swing = Direction;
       }
@@ -2614,13 +2532,8 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
 
         //-----BUTTONS COMMANDS----//
         if (keyEnable) {
-          if (!greenstate) {
-            if (Direction) {
-              if (trigMode > 0) trigMode--;
-            } else {
-              if (trigMode < 2) trigMode++;
-            }
-          } else if (trigMode > 0) enableSustain = Direction;
+          if (!greenstate) trigMode = clampAdjust(trigMode, !Direction, 0, 2);
+          else if (trigMode > 0) enableSustain = Direction;
         }
 
         //-----SCREEN COMMANDS----//
@@ -2672,13 +2585,7 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
 
         else {  // drum mode
           //-----BUTTONS COMMANDS----//
-          if (keyEnable) {
-            if (!Direction) {
-              if (drumKeybMode < 3) drumKeybMode++;
-            } else {
-              if (drumKeybMode > 0) drumKeybMode--;
-            }
-          }
+          if (keyEnable) drumKeybMode = clampAdjust(drumKeybMode, !Direction, 0, 3);
 
           //-----SCREEN COMMANDS----//
           oled.printPtr(drumkeybmodes, drumKeybMode);
@@ -2710,13 +2617,7 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
       //-----BUTTONS COMMANDS----//
       if (keyEnable) {
         if (!greenstate) metro = Direction;
-        else {
-          if (Direction) {
-            if (tSignature < 8) tSignature++;
-          } else {
-            if (tSignature > 1) tSignature--;
-          }
-        }
+        else tSignature = clampAdjust(tSignature, Direction, 1, 8);
       }
 
       //-----SCREEN COMMANDS----//
@@ -2734,11 +2635,7 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
       if (keyEnable) {
         if (!greenstate) {
           AllNotesOff();
-          if (Direction) {
-            if (midiChannel < 16) midiChannel++;
-          } else {
-            if (midiChannel > 1) midiChannel--;
-          }
+          midiChannel = clampAdjust(midiChannel, Direction, 1, 16);
         } else {
           EEPROM2.update(0, midiChannel);
           ScreenBlink();
@@ -2755,13 +2652,8 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
 
       //-----BUTTONS COMMANDS----//
       if (keyEnable) {
-        if (!greenstate) {
-          if (Direction) {
-            if (sendrealtime < 2) sendrealtime++;
-          } else {
-            if (sendrealtime > 0) sendrealtime--;
-          }
-        } else {
+        if (!greenstate) sendrealtime = clampAdjust(sendrealtime, Direction, 0, 2);
+        else {
           EEPROM2.update(1, sendrealtime);
           ScreenBlink();
         }
@@ -2778,13 +2670,8 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
       //-----BUTTONS COMMANDS----//
       if (keyEnable) {
         if (internalClock) {
-          if (!greenstate) {
-            if (Direction) {
-              if (syncport < 3) syncport++;
-            } else {
-              if (syncport > 0) syncport--;
-            }
-          } else {
+          if (!greenstate) syncport = clampAdjust(syncport, Direction, 0, 3);
+          else {
             EEPROM2.update(3, syncport);
             ScreenBlink();
           }
@@ -2802,13 +2689,8 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
 
       //-----BUTTONS COMMANDS----//
       if (keyEnable) {
-        if (!greenstate) {
-          if (Direction) {
-            if (mapButtonSelect > 0) mapButtonSelect--;
-          } else {
-            if (mapButtonSelect < 3) mapButtonSelect++;
-          }
-        } else {
+        if (!greenstate) mapButtonSelect = clampAdjust(mapButtonSelect, !Direction, 0, 3);
+        else {
           for (uint8_t i = 0; i < 4; i++) {
             EEPROM2.update(4 + i, buttonCC[i]);
           }
@@ -2832,13 +2714,8 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
 
       //-----BUTTONS COMMANDS----//
       if (keyEnable) {
-        if (!greenstate) {
-          if (Direction) {
-            if (soundmode > 1) soundmode--;
-          } else {
-            if (soundmode < 3) soundmode++;
-          }
-        } else {
+        if (!greenstate) soundmode = clampAdjust(soundmode, !Direction, 1, 3);
+        else {
           EEPROM2.update(2, soundmode);
           ScreenBlink();
         }
@@ -3331,7 +3208,10 @@ void ButtonsCommands(bool anypressed) {  // manage buttons' commands
               PrintAlertNotifi(8);  // show step
             }
 
-          } else SynthReset();  // reset synth
+          } else {
+            SynthReset();  // reset synth
+            ScreenBlink();
+          }
           greentristate = 0;
           newgreenstate = false;
         } else if (newredstate) {  // lock mute
