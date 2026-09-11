@@ -2,9 +2,9 @@
  *  @file       Arpmini.ino
  *  Project     Estorm - Arpmini
  *  @brief      MIDI Sequencer & Arpeggiator
- *  @version    2.36
+ *  @version    2.37
  *  @author     Paolo Estorm
- *  @date       2026/07/09
+ *  @date       2026/07/30
  *  @license    GPL v3.0 
  *
  *  This program is free software: you can redistribute it and/or modify
@@ -25,7 +25,7 @@
 // https://brendanclarke.com/wp/2014/04/23/arduino-based-midi-sequencer/
 
 // system
-const char version[] PROGMEM = "V2.36";
+const char version[] PROGMEM = "V2.37";
 #include "Vocabulary.h"
 #include "Random8.h"
 Random8 Random;
@@ -132,7 +132,7 @@ bool flipflopEnable;                // switch for the frameperstep's flipflop
 bool swing = false;                 // is swing enabled?
 bool snapmode = 0;                  // when play/stop the next sequence in live mode. 0=pattern, 1=beat
 bool start = false;                 // dirty fix for a ableton live 10 bug. becomes true once at sequence start and send a sync command
-bool armStart = false;              // count-off: armed one beat before the recording downbeat, sends Start just before its clock
+bool armStart = false;              // count-in: armed one beat before the recording downbeat, sends Start just before its clock
 uint8_t BPM = 120;                  // beats per minute for internalclock - min 20, max 250 bpm
 const uint8_t TAP_ITERATIONS = 8;   // how many BPM "samples" to averege out for the tap tempo. more = more accurate
 uint8_t BPMbuffer[TAP_ITERATIONS];  // BPM "samples" buffer for tap tempo
@@ -152,9 +152,9 @@ bool strum = false;                 // strum mode enabled?
 
 // sequencer
 bool recording = false;                         // is the sequencer in the recording state?
-bool countOff_Enable = true;                    // start recording after a countdown?
-bool trig_countOff = false;                     // trigger the count-off
-uint8_t countOff_Count = 0;                     // keep track of the count-off count
+bool countIN_Enable = true;                     // start recording after a countdown?
+bool trig_countIN = false;                      // trigger the count-in
+uint8_t countIN_Count = 0;                      // keep track of the count-in count
 bool keybTransp = true;                         // enable transpose by key? (only rec, song & live mode)
 const uint8_t KEYB_BASENOTE = 48;               // for transpose by key, the sequence is transposed based on the note C3 (midi note 48)
 uint8_t keybTransposeNote = 48;                 // the last note number received for transposing the sequence
@@ -321,9 +321,9 @@ void setup() {  // initialization setup
 
 void safedigitalWrite(uint8_t pin, bool state) {  // avoid digitalwrite and i2c at the same time (external eeprom)
 
-  if (EEPROM2.busy && pin <= 1) return;  // red and yellow leds share i2c pins, skip while bus busy
-  if (state) *ledPort[pin] |= ledBit[pin];
-  else *ledPort[pin] &= ~ledBit[pin];
+  if (EEPROM2.busy && pin <= 1) return;     // red and yellow leds share i2c pins, skip while bus busy
+  if (state) *ledPort[pin] |= ledBit[pin];  // pin HIGH
+  else *ledPort[pin] &= ~ledBit[pin];       // pin LOW
 }
 
 void SystemReset() {  // restart system
@@ -742,7 +742,7 @@ void TapTempo() {  // calculate tempo based on the tapping frequency
 void HandleInternalClock() {  // internal clock
 
   if (internalClock) {
-    if (playing && armStart && globalTicks == 11 && (countBeat % 2 != 0)) {  // last tick before the count-off downbeat
+    if (playing && armStart && globalTicks == 11 && (countBeat % 2 != 0)) {  // last tick before the count-in downbeat
       armStart = false;
       SendRealtime(midi::Start);  // start just before the downbeat
     }
@@ -773,7 +773,7 @@ void RunClock() {  // main clock
 
   bool clockenable = !internalClock || playing;  // external clock, run the clock always. internal clock, run the clock only while playing
 
-  static bool do_countOff = false;
+  static bool do_countIN = false;
 
   if (modeselect < 2) {  // arp & rec mode, trigmodes logics
 
@@ -810,27 +810,27 @@ void RunClock() {  // main clock
 
         if (recording || metro) Metronome();  // play metronome
 
-        if (trig_countOff) {                // if count-off has been triggered
-          trig_countOff = false;            // disable trigger
+        if (trig_countIN) {                 // if count-in has been triggered
+          trig_countIN = false;             // disable trigger
           if (playing && recording) {       // if the conditions are right
-            do_countOff = true;             // activate count-off
+            do_countIN = true;              // activate count-in
             safedigitalWrite(redLED, LOW);  // turn off
-          } else do_countOff = false;       // if conditions aren't right deactivate count-off
-          countOff_Count = 0;               // reset count
+          } else do_countIN = false;        // if conditions aren't right deactivate count-in
+          countIN_Count = 0;                // reset count
         }
 
-        if (do_countOff && !recording) do_countOff = false;  // in case recording is disabled while count-off, deactivate count-off
+        if (do_countIN && !recording) do_countIN = false;  // in case recording is disabled while count-in, deactivate count-in
 
-        if (do_countOff) {                                                       // while count-off
-          if (countOff_Count < tSignature) {                                     // if count is less than time signature
-            countOff_Count++;                                                    // count from 0 to time signature
-            safeNotification = 12;                                               // print count-off notification
-            if (countOff_Count == tSignature && internalClock) armStart = true;  // set flag for the start midi message
-          } else {                                                               // if count is equal than time signature
-            do_countOff = false;                                                 // deactivate count-off
-            countOff_Count = 0;                                                  // reset count
-            safeNotification = 13;                                               // close count-off notification
-            safedigitalWrite(redLED, HIGH);                                      // turn on red led
+        if (do_countIN) {                                                       // while count-in
+          if (countIN_Count < tSignature) {                                     // if count is less than time signature
+            countIN_Count++;                                                    // count from 0 to time signature
+            safeNotification = 12;                                              // print count-in notification
+            if (countIN_Count == tSignature && internalClock) armStart = true;  // set flag for the start midi message
+          } else {                                                              // if count is equal than time signature
+            do_countIN = false;                                                 // deactivate count-in
+            countIN_Count = 0;                                                  // reset count
+            safeNotification = 13;                                              // close count-in notification
+            safedigitalWrite(redLED, HIGH);                                     // turn on red led
           }
         }
       }
@@ -888,7 +888,7 @@ void RunClock() {  // main clock
     }
   }
 
-  if (do_countOff && recording && playing) return;
+  if (do_countIN && recording && playing) return;
 
   if (countTicks == 0) {  // trigger new step
     if (start) {
@@ -1115,8 +1115,8 @@ void StartAndStop() {  // manage starts and stops
   if (internalClock) {
     if (playing) {
       Startposition();
-      if (!(recording && countOff_Enable)) SendRealtime(midi::Start);  // send start only if count-off is disabled
-      start = true;                                                    // to make ableton live 10 happy
+      if (!(recording && countIN_Enable)) SendRealtime(midi::Start);  // send start only if count-in is disabled
+      start = true;                                                   // to make ableton live 10 happy
     } else SendRealtime(midi::Stop);
   } else {  // not internal clock
     AllNotesOff();
@@ -1152,7 +1152,7 @@ void Startposition() {  // called every time the sequencer starts
 
   if (numNotesHeld) AllNotesOff();
 
-  if (countOff_Enable) trig_countOff = true;
+  if (countIN_Enable) trig_countIN = true;
 
   armStart = false;
   countBeat = -1;
@@ -1325,7 +1325,6 @@ void HandleNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle 
           }
         }
       }
-
     }
 
     else {  // if playing
@@ -1394,7 +1393,6 @@ void HandleNoteOn(uint8_t channel, uint8_t note, uint8_t velocity) {  // handle 
         }
       }
     }
-
   } else SendNoteOn(note, velocity, channel);  // bypass if different channel
 }
 
@@ -1886,10 +1884,10 @@ void PrintAlertNotifi(uint8_t txt) {  // print notifications
       oled.print(F("LOST"));
       break;
 
-    case 12:  // count-off
+    case 12:  // count-in
       oled.setCursorX(17 + ((8 - tSignature) * 6));
       for (uint8_t i = 0; i < tSignature; i++) {
-        if (countOff_Count <= i) oled.printF(emptybox);
+        if (countIN_Count <= i) oled.printF(emptybox);
         else oled.printF(fullbox);
       }
       break;
@@ -2137,9 +2135,9 @@ void PrintMenu(uint8_t item) {  // print main menu - menu 1
       oled.printF(printmode);
       break;
 
-    case 13:  // count-off
+    case 13:  // count-in
       oled.printlnF(printcount);
-      oled.printF(off);
+      oled.print(F("IN"));
       break;
 
     case 14:  // metronome
@@ -2602,14 +2600,14 @@ void SubmenuSettings(uint8_t item, int8_t dir) {  // change & print settings in 
       }
       break;
 
-    case 13:  // count-off
+    case 13:  // count-in
 
       //-----BUTTONS COMMANDS----//
-      if (keyEnable) countOff_Enable = Direction;
+      if (keyEnable) countIN_Enable = Direction;
 
       //-----SCREEN COMMANDS----//
       oled.printlnF(printcount);
-      oled.printPtr(offonalways, countOff_Enable);
+      oled.printPtr(offonalways, countIN_Enable);
       break;
 
     case 14:  // metronome
@@ -3794,7 +3792,7 @@ void ButtonsCommands(bool anypressed) {  // manage buttons' commands
     if (!recording) {
       safedigitalWrite(redLED, redstate);
       safedigitalWrite(yellowLED, yellowstate);
-    } else if (countOff_Enable && !playing) safedigitalWrite(redLED, HIGH);
+    } else if (countIN_Enable && !playing) safedigitalWrite(redLED, HIGH);
 
     safedigitalWrite(greenLED, greenstate);
 
